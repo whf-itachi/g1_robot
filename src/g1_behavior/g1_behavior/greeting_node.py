@@ -3,6 +3,7 @@ from rclpy.node import Node
 
 import time
 
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from g1_interfaces.msg import FaceResult
 from g1_motion.motion_node import MotionController
 
@@ -11,6 +12,7 @@ class GreetingNode(Node):
 
     def __init__(self):
         super().__init__("greeting_node")
+        ChannelFactoryInitialize(0)
         self.get_logger().info("Greeting node started")
         # 动作控制器
         self.motion = MotionController()

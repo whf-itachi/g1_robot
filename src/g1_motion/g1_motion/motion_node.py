@@ -1,11 +1,15 @@
 import time
 
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
 
 class MotionController:
 
     def __init__(self):
+        if not hasattr(MotionController, "_initialized"):
+            ChannelFactoryInitialize(0)
+            MotionController._initialized = True
 
         self.motion = LocoClient()
 
@@ -15,7 +19,6 @@ class MotionController:
         """初始化运动控制器"""
         if self.state == "IDLE":
             self.motion.Init()
-            self.get_logger().info("Motion controller initialized")
 
     def stop(self):
 
