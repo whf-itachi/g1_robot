@@ -55,3 +55,15 @@ class MotionController:
     def is_busy(self):
 
         return self.state in ["STOPPING", "GREETING", "MOVING"]
+
+
+def main(args=None):
+    import rclpy
+    rclpy.init(args=args)
+
+    node = MotionController()
+
+    rclpy.spin(node)
+
+    node.destroy_node()
+    rclpy.shutdown()
