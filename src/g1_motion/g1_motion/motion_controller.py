@@ -14,6 +14,9 @@ class MotionController:
 
         self.state = "IDLE"
 
+    def init(self):
+        pass
+
     def stop(self):
 
         if self.state == "STOPPING":
