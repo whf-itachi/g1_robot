@@ -1,45 +1,58 @@
 import rclpy
 from rclpy.node import Node
-
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
-
 import cv2
+import numpy as np
+
+# 关键修改：导入宇树自定义消息类型
+# 请确保已 source 了包含 unitree_go 的工作空间
+try:
+    from unitree_go.msg import Go2FrontVideoData
+except ImportError:
+    print("错误：找不到 unitree_go 消息定义。请先执行 source 宇树工作空间/setup.bash")
 
 
-class CameraNode(Node):
-
+class G1CameraNode(Node):
     def __init__(self):
+        super().__init__("g1_camera_node")
 
-        super().__init__("camera_node")
-
-        self.bridge = CvBridge()
-
+        # 修改点 1：订阅话题改为机器人现有的视频流话题
         self.subscription = self.create_subscription(
-            Image,
-            "/camera/image",
+            Go2FrontVideoData,
+            "/frontvideostream",
             self.image_callback,
             10
         )
 
-        self.get_logger().info("Camera node started")
+        self.get_logger().info("已连接到 G1 机器人内置视频流 (/frontvideostream)")
 
     def image_callback(self, msg):
+        try:
+            # 修改点 2：将压缩的字节流转换为 OpenCV 格式
+            # msg.video_data 是原始字节数据，我们需要先转为 numpy 数组
+            np_arr = np.frombuffer(bytes(msg.video_data), np.uint8)
 
-        frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+            # 使用 cv2.imdecode 进行解码
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-        cv2.imshow("camera", frame)
-        cv2.waitKey(1)
+            if frame is not None:
+                # 显示图像
+                cv2.imshow("G1 Real-time Video", frame)
+                cv2.waitKey(1)
+            else:
+                self.get_logger().warn("接收到数据但解码失败")
+
+        except Exception as e:
+            self.get_logger().error(f"处理视频流出错: {e}")
 
 
 def main(args=None):
-
     rclpy.init(args=args)
-
-    node = CameraNode()
-
-    rclpy.spin(node)
-
-    node.destroy_node()
-
-    rclpy.shutdown()
+    node = G1CameraNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cv2.destroyAllWindows()
+        node.destroy_node()
+        rclpy.shutdown()

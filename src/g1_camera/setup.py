@@ -25,7 +25,6 @@ setup(
     entry_points={
         'console_scripts': [
             'camera_node = g1_camera.camera_node:main',
-            'video_bridge_node = g1_camera.video_bridge_node:main',
         ],
     },
 )
