@@ -38,6 +38,7 @@ class FaceNode(Node):
             )
 
         self.db = FaceDatabase(db_path)
+        self.get_logger().info(f"database size: {len(self.db.data)}")
 
         self.sub = self.create_subscription(
             Image,
