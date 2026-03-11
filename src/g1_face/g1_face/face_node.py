@@ -58,16 +58,19 @@ class FaceNode(Node):
 
         faces = self.detector.get(frame)
 
+        self.get_logger().info(f"detected faces: {len(faces)}")
+
         for face in faces:
 
             name, sim = self.db.match(face.embedding)
 
-            if name:
+            self.get_logger().info(f"match result: {name}, sim={sim}")
 
+            if name:
                 result = FaceResult()
 
                 result.name = name
-                result.similarity = sim
+                result.similarity = float(sim)
 
                 self.pub.publish(result)
 
