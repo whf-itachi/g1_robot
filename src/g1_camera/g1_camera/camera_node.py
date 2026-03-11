@@ -1,47 +1,40 @@
 import rclpy
 from rclpy.node import Node
 
-import cv2
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+
+import cv2
 
 
 class CameraNode(Node):
 
     def __init__(self):
 
-        super().__init__('camera_node')
-
-        self.cap = cv2.VideoCapture(0)
+        super().__init__("camera_node")
 
         self.bridge = CvBridge()
 
-        self.publisher = self.create_publisher(
+        self.subscription = self.create_subscription(
             Image,
             "/camera/image",
+            self.image_callback,
             10
         )
 
-        self.timer = self.create_timer(
-            0.5,
-            self.publish_frame
-        )
+        self.get_logger().info("Camera node started")
 
-    def publish_frame(self):
+    def image_callback(self, msg):
 
-        ret, frame = self.cap.read()
+        frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
 
-        if not ret:
-            return
-
-        msg = self.bridge.cv2_to_imgmsg(frame, "bgr8")
-
-        self.publisher.publish(msg)
+        cv2.imshow("camera", frame)
+        cv2.waitKey(1)
 
 
-def main():
+def main(args=None):
 
-    rclpy.init()
+    rclpy.init(args=args)
 
     node = CameraNode()
 
