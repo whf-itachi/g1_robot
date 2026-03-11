@@ -2,57 +2,59 @@ import rclpy
 from rclpy.node import Node
 import cv2
 import numpy as np
-
-# 关键修改：导入宇树自定义消息类型
-# 请确保已 source 了包含 unitree_go 的工作空间
-try:
-    from unitree_go.msg import Go2FrontVideoData
-except ImportError:
-    print("错误：找不到 unitree_go 消息定义。请先执行 source 宇树工作空间/setup.bash")
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+from unitree_go.msg import Go2FrontVideoData
 
 
-class G1CameraNode(Node):
+class G1CameraDecoder(Node):
     def __init__(self):
-        super().__init__("g1_camera_node")
+        super().__init__("g1_camera_decoder")
+        self.bridge = CvBridge()
+        # 订阅机器人发出的压缩流
+        self.sub = self.create_subscription(
+            Go2FrontVideoData, "/frontvideostream", self.callback, 10)
+        # 发布给 face_node 使用的标准图片
+        self.pub = self.create_publisher(Image, "/camera/standard_image", 10)
+        self.get_logger().info("解码中转站已启动...")
 
-        # 修改点 1：订阅话题改为机器人现有的视频流话题
-        self.subscription = self.create_subscription(
-            Go2FrontVideoData,
-            "/frontvideostream",
-            self.image_callback,
-            10
-        )
-
-        self.get_logger().info("已连接到 G1 机器人内置视频流 (/frontvideostream)")
-
-    def image_callback(self, msg):
+    def callback(self, msg):
         try:
-            # 修改点 2：将压缩的字节流转换为 OpenCV 格式
-            # msg.video_data 是原始字节数据，我们需要先转为 numpy 数组
-            np_arr = np.frombuffer(bytes(msg.video_data), np.uint8)
-
-            # 使用 cv2.imdecode 进行解码
-            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            # 关键：将 bytes 转换为 numpy 数组
+            data = np.frombuffer(bytes(msg.video_data), dtype=np.uint8)
+            # 使用 cv2 解码。宇树的流通常是 JPEG 压缩
+            frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
 
             if frame is not None:
-                # 显示图像
-                cv2.imshow("G1 Real-time Video", frame)
-                cv2.waitKey(1)
+                # 成功解码，发布标准 ROS2 图片
+                ros_img = self.bridge.cv2_to_imgmsg(frame, "bgr8")
+                self.pub.publish(ros_img)
             else:
-                self.get_logger().warn("接收到数据但解码失败")
-
-        except Exception as e:
-            self.get_logger().error(f"处理视频流出错: {e}")
+                # 如果解码失败，静默处理，不要打印报错
+                pass
+        except Exception:
+            pass
 
 
 def main(args=None):
+    # 1. 初始化 rclpy 环境
     rclpy.init(args=args)
-    node = G1CameraNode()
+
+    # 2. 实例化你的节点
+    node = G1CameraDecoder()
+
     try:
+        # 3. 开启循环监听，处理回调函数
         rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+        # 4. 捕获 Ctrl+C，优雅退出
+        node.get_logger().info("正在停止 G1 相机解码节点...")
+    except Exception as e:
+        print(f"程序运行出错: {e}")
     finally:
-        cv2.destroyAllWindows()
+        # 5. 确保销毁节点和关闭环境（释放内存和话题句柄）
         node.destroy_node()
         rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

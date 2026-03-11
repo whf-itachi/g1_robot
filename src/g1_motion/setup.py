@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'motion_node = g1_motion.motion_node:main',
+            'g1_debug = g1_motion.g1_debug_node:main',
         ],
     },
 )

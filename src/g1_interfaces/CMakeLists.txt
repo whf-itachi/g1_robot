@@ -12,6 +12,7 @@ find_package(rosidl_default_generators REQUIRED)
 # 生成消息
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaceResult.msg"
+  "msg/MotionCmd.msg"
 )
 
 # 导出运行时依赖

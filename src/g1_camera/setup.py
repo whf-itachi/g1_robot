@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'camera_node = g1_camera.camera_node:main',
+            'face_node_direct = g1_camera.face_node_direct:main',
         ],
     },
 )
