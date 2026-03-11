@@ -1,17 +1,21 @@
 import time
 
-from unitree_sdk2py.g1.motion.g1_motion_client import MotionClient
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
 
 class MotionController:
 
     def __init__(self):
 
-        self.motion = MotionClient()
-
-        self.motion.Init()
+        self.motion = LocoClient()
 
         self.state = "IDLE"
+
+    def init(self):
+        """初始化运动控制器"""
+        if self.state == "IDLE":
+            self.motion.Init()
+            self.get_logger().info("Motion controller initialized")
 
     def stop(self):
 
@@ -34,17 +38,20 @@ class MotionController:
 
         self.state = "GREETING"
 
-        self.motion.PlayMotion(
-            "wave_hand",
-            wait_finish=True
-        )
+        self.motion.WaveHand()
+
+        time.sleep(1.0)
 
         self.state = "IDLE"
 
     def is_moving(self):
-
+        """检查机器人是否正在移动"""
         return self.state == "MOVING"
+
+    def set_moving(self, is_moving: bool):
+        """设置移动状态"""
+        self.state = "MOVING" if is_moving else "IDLE"
 
     def is_busy(self):
 
-        return self.state in ["STOPPING", "GREETING"]
+        return self.state in ["STOPPING", "GREETING", "MOVING"]

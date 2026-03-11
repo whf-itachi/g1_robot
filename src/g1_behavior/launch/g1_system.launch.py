@@ -7,6 +7,11 @@ def generate_launch_description():
     return LaunchDescription([
 
         Node(
+            package="g1_motion",
+            executable="motion_node"
+        ),
+
+        Node(
             package="g1_camera",
             executable="camera_node"
         ),

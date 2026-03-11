@@ -15,6 +15,12 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
+    # options={
+    #         'build_scripts': {
+    #             'executable': '/usr/bin/env python3'
+    #             },
+    #         },
+
     maintainer='haitch',
     maintainer_email='haitch@todo.todo',
     description='TODO: Package description',

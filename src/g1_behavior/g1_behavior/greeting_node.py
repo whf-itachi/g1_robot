@@ -14,6 +14,7 @@ class GreetingNode(Node):
         self.get_logger().info("Greeting node started")
         # 动作控制器
         self.motion = MotionController()
+        self.motion.init()
         # 一分钟去重
         self.last_seen = {}
         # 当前机器人状态
