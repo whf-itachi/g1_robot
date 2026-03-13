@@ -1,7 +1,6 @@
 import rclpy
 from rclpy.node import Node
 
-import time
 from threading import Thread
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
@@ -13,13 +12,16 @@ class GreetingNode(Node):
 
     def __init__(self):
         super().__init__("greeting_node")
-        ChannelFactoryInitialize(0)  # 初始化DDS通信通道
+        ChannelFactoryInitialize(0)  # 初始化 DDS 通信通道
         self.get_logger().info("Greeting node started")
 
-        # 一分钟去重
+        # 人脸去重记录 {name: timestamp}
         self.last_seen = {}
         # 当前机器人状态
         self.robot_state = "IDLE"
+        # 去重时间阈值（秒）
+        self.dedup_interval = 15.0
+
         self.sub = self.create_subscription(
             FaceResult,
             "/face/result",
@@ -44,20 +46,21 @@ class GreetingNode(Node):
 
         name = msg.name
         similarity = msg.similarity
-        now = time.time()
         # 相似度过滤
         if similarity < 0.6:
             return
-        # 一分钟内不重复
+
+        # 使用 ROS2 时钟进行去重检查
+        now = self.get_clock().now().nanoseconds / 1e9
         if name in self.last_seen:
-            if now - self.last_seen[name] < 60:
+            if now - self.last_seen[name] < self.dedup_interval:
                 return
         self.last_seen[name] = now
 
         self.get_logger().info(
             f"Face detected: {name}"
         )
-        # self.handle_greeting(name) 改为使用线程 避免阻塞ROS回调导致 rclpy.spin 无法处理其他消息
+        # 使用线程 避免阻塞 ROS 回调导致 rclpy.spin 无法处理其他消息
         Thread(target=self.handle_greeting, args=(name,)).start()
 
     def handle_greeting(self, name):

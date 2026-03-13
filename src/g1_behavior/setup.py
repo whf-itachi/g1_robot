@@ -5,7 +5,7 @@ package_name = 'g1_behavior'
 
 setup(
     name=package_name,
-    version='0.0.0',
+    version='0.1.0',
     packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -15,16 +15,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    # options={
-    #         'build_scripts': {
-    #             'executable': '/usr/bin/env python3'
-    #             },
-    #         },
-
-    maintainer='haitch',
-    maintainer_email='haitch@todo.todo',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    maintainer='Nathan',
+    maintainer_email='service02@haitch.cn',
+    description='G1 机器人行为响应包 - 处理人脸识别后的问候和交互行为',
+    license='Apache-2.0',
     extras_require={
         'test': [
             'pytest',

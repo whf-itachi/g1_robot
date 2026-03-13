@@ -1,100 +1,81 @@
 import rclpy
 from rclpy.node import Node
 import cv2
-import numpy as np
 
-# 宇树 SDK
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-from unitree_sdk2py.go2.video.video_client import VideoClient
-
-# ROS 消息
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
 
-class FaceNodeMultiSource(Node):
+class FaceCameraNode(Node):
+
     def __init__(self):
-        super().__init__("face_node_multi_source")
+        super().__init__("face_camera_node")
 
         self.bridge = CvBridge()
 
-        # --- 发布者：发布原始图像 (注意话题名和类型) ---
-        # 下游节点将订阅这个话题
-        self.pub_image = self.create_publisher(Image, "/camera/standard_image", 10)
+        self.pub_image = self.create_publisher(
+            Image,
+            "/camera/standard_image",
+            10
+        )
 
-        # --- 1. 初始化宇树 SDK ---
-        self.unitree_client = None
-        try:
-            ChannelFactoryInitialize(0)
-            self.unitree_client = VideoClient()
-            self.unitree_client.Init()
-            self.get_logger().info("✅ 宇树 VideoClient 初始化成功")
-            # 频率 10Hz 足够用于识别，降低 CPU 占用
-            self.timer_unitree = self.create_timer(0.1, self.callback_unitree_video)
-        except Exception as e:
-            self.get_logger().error(f"❌ 宇树 SDK 初始化失败: {e}")
-            self.timer_unitree = None
+        # 打开摄像头（C920 推荐写法）
+        self.cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
 
-        # --- 2. 初始化 USB 摄像头 ---
-        self.usb_cap = None
-        usb_device = "/dev/video0"
-        try:
-            self.usb_cap = cv2.VideoCapture(usb_device)
-            if not self.usb_cap.isOpened():
-                raise IOError(f"无法打开设备 {usb_device}")
-            self.usb_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            self.usb_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            self.get_logger().info(f"✅ USB 摄像头 ({usb_device}) 初始化成功")
-            self.timer_usb = self.create_timer(0.1, self.callback_usb_video)
-        except Exception as e:
-            self.get_logger().error(f"❌ USB 摄像头初始化失败: {e}")
-            self.timer_usb = None
+        if not self.cap.isOpened():
+            self.get_logger().error("无法打开摄像头 /dev/video0")
+            return
 
-    def callback_unitree_video(self):
-        if not self.unitree_client: return
-        code, data = self.unitree_client.GetImageSample()
-        if code == 0 and data:
-            try:
-                img_array = np.frombuffer(bytes(data), np.uint8)
-                frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-                if frame is not None:
-                    self.publish_frame(frame, "UnitreeCam")
-            except:
-                pass
-        else:
-            self.get_logger().error(f"G1 摄像头获取数据失败！")
+        # C920 必须设置 MJPG
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
-    def callback_usb_video(self):
-        if not self.usb_cap or not self.usb_cap.isOpened(): return
-        ret, frame = self.usb_cap.read()
-        if ret and frame is not None:
-            self.publish_frame(frame, "USBCam")
+        # 设置分辨率
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-    def publish_frame(self, frame, source_name):
-        # 核心改动：不再做识别，直接转成 ROS Image 消息发布
-        # 注意：CvBridge 需要知道编码，通常是 bgr8
+        # 设置帧率
+        self.cap.set(cv2.CAP_PROP_FPS, 30)
+
+        self.get_logger().info("USB 摄像头初始化成功")
+
+        self.timer = self.create_timer(0.1, self.timer_callback)
+
+    def timer_callback(self):
+
+        ret, frame = self.cap.read()
+
+        if not ret:
+            self.get_logger().warn("摄像头读取失败")
+            return
+
         msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = source_name  # 用 frame_id 标记来源
+        msg.header.frame_id = "usb_camera"
+
         self.pub_image.publish(msg)
 
     def destroy_node(self):
-        if self.usb_cap: self.usb_cap.release()
-        self.unitree_client = None
+
+        if self.cap:
+            self.cap.release()
+
         super().destroy_node()
 
 
 def main(args=None):
+
     rclpy.init(args=args)
-    node = FaceNodeMultiSource()
+
+    node = FaceCameraNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+
+    node.destroy_node()
+    rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
