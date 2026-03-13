@@ -15,7 +15,7 @@ class G1CameraDecoder(Node):
         self.sub = self.create_subscription(
             Go2FrontVideoData, "/frontvideostream", self.callback, 10)
         # 发布给 face_node 使用的标准图片
-        self.pub = self.create_publisher(Image, "/camera/standard_image", 10)
+        self.pub = self.create_publisher(Image, "old/camera", 10)  # 该文件暂时保留添加old头进行区别
         self.get_logger().info("解码中转站已启动...")
 
     def callback(self, msg):

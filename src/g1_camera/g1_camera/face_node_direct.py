@@ -2,81 +2,91 @@ import rclpy
 from rclpy.node import Node
 import cv2
 import numpy as np
-import os
-import insightface
 
-# 宇树 SDK2 官方推荐的视频导入方式
+# 宇树 SDK
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from unitree_sdk2py.go2.video.video_client import VideoClient
 
-# 你的业务逻辑导入
-from g1_interfaces.msg import FaceResult
-from g1_face.face_database import FaceDatabase
+# ROS 消息
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 
-class FaceNodeDirect(Node):
+class FaceNodeMultiSource(Node):
     def __init__(self):
-        super().__init__("face_node_direct")
+        super().__init__("face_node_multi_source")
 
-        # 1. 初始化 SDK 通道
-        ChannelFactoryInitialize(0)
+        self.bridge = CvBridge()
 
-        # 2. 使用官方 VideoClient (这是 G1/Go2 的标准做法)
-        self.client = VideoClient()
-        self.client.Init()
+        # --- 发布者：发布原始图像 (注意话题名和类型) ---
+        # 下游节点将订阅这个话题
+        self.pub_image = self.create_publisher(Image, "/camera/standard_image", 10)
 
-        # 创建一个定时器来轮询视频帧 (VideoClient 通常使用拉取模式)
-        self.timer = self.create_timer(0.03, self.process_video_frame)  # 约 30fps
-
-        # 3. 初始化人脸识别
-        self.detector = insightface.app.FaceAnalysis(
-            model='buffalo_l', providers=['CPUExecutionProvider'])
-        self.detector.prepare(ctx_id=0)
-
-        db_path = os.path.expanduser("~/haitch/g1_robot/data/face_database.json")
-        self.db = FaceDatabase(db_path)
-
-        # 4. 初始化 ROS2 发布者
-        self.pub = self.create_publisher(FaceResult, "/face/result", 10)
-        self.get_logger().info(f"✅ G1 人脸识别直连节点已启动")
-
-    def process_video_frame(self):
-        # 从 VideoClient 获取最新图像
-        # code, data = self.client.GetImage()
-        code, data = self.client.GetImageSample()
-        if code != 0:
-            # code 0 表示成功，如果不为 0 可能还没收到数据，跳过即可
-            return
-
+        # --- 1. 初始化宇树 SDK ---
+        self.unitree_client = None
         try:
-            # 解码图像数据
-            img_array = np.frombuffer(bytes(data), np.uint8)
-            frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-
-            if frame is not None:
-                # 执行识别
-                faces = self.detector.get(frame)
-                for face in faces:
-                    name, sim = self.db.match(face.embedding)
-
-                    if name:
-                        self.get_logger().info(f"👤 检测到: {name} (相似度: {sim:.2f})")
-                        result = FaceResult()
-                        result.name = name
-                        result.similarity = float(sim)
-                        self.pub.publish(result)
-
-                # 调试窗口（可选）
-                # cv2.imshow("G1 Face Detection", frame)
-                # cv2.waitKey(1)
-
+            ChannelFactoryInitialize(0)
+            self.unitree_client = VideoClient()
+            self.unitree_client.Init()
+            self.get_logger().info("✅ 宇树 VideoClient 初始化成功")
+            # 频率 10Hz 足够用于识别，降低 CPU 占用
+            self.timer_unitree = self.create_timer(0.1, self.callback_unitree_video)
         except Exception as e:
-            self.get_logger().error(f"处理视频帧时出错: {e}")
+            self.get_logger().error(f"❌ 宇树 SDK 初始化失败: {e}")
+            self.timer_unitree = None
+
+        # --- 2. 初始化 USB 摄像头 ---
+        self.usb_cap = None
+        usb_device = "/dev/video0"
+        try:
+            self.usb_cap = cv2.VideoCapture(usb_device)
+            if not self.usb_cap.isOpened():
+                raise IOError(f"无法打开设备 {usb_device}")
+            self.usb_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            self.usb_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            self.get_logger().info(f"✅ USB 摄像头 ({usb_device}) 初始化成功")
+            self.timer_usb = self.create_timer(0.1, self.callback_usb_video)
+        except Exception as e:
+            self.get_logger().error(f"❌ USB 摄像头初始化失败: {e}")
+            self.timer_usb = None
+
+    def callback_unitree_video(self):
+        if not self.unitree_client: return
+        code, data = self.unitree_client.GetImageSample()
+        if code == 0 and data:
+            try:
+                img_array = np.frombuffer(bytes(data), np.uint8)
+                frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                if frame is not None:
+                    self.publish_frame(frame, "UnitreeCam")
+            except:
+                pass
+        else:
+            self.get_logger().error(f"G1 摄像头获取数据失败！")
+
+    def callback_usb_video(self):
+        if not self.usb_cap or not self.usb_cap.isOpened(): return
+        ret, frame = self.usb_cap.read()
+        if ret and frame is not None:
+            self.publish_frame(frame, "USBCam")
+
+    def publish_frame(self, frame, source_name):
+        # 核心改动：不再做识别，直接转成 ROS Image 消息发布
+        # 注意：CvBridge 需要知道编码，通常是 bgr8
+        msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = source_name  # 用 frame_id 标记来源
+        self.pub_image.publish(msg)
+
+    def destroy_node(self):
+        if self.usb_cap: self.usb_cap.release()
+        self.unitree_client = None
+        super().destroy_node()
 
 
 def main(args=None):
     rclpy.init(args=args)
-    node = FaceNodeDirect()
+    node = FaceNodeMultiSource()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

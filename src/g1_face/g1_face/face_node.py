@@ -4,7 +4,6 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 import insightface
-import numpy as np
 
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
