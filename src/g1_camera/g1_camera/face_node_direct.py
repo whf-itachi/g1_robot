@@ -13,25 +13,31 @@ class FaceCameraNode(Node):
 
         self.bridge = CvBridge()
 
-        # 发布图像
-        self.pub_image = self.create_publisher(Image, "/camera/standard_image", 10)
+        self.pub_image = self.create_publisher(
+            Image,
+            "/camera/standard_image",
+            10
+        )
 
-        # USB 摄像头
-        device = "/dev/video0"
-
-        self.cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
+        # 打开摄像头（C920 推荐写法）
+        self.cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
 
         if not self.cap.isOpened():
-            self.get_logger().error(f"无法打开摄像头 {device}")
+            self.get_logger().error("无法打开摄像头 /dev/video0")
             return
+
+        # C920 必须设置 MJPG
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
 
         # 设置分辨率
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-        self.get_logger().info(f"USB 摄像头 {device} 初始化成功")
+        # 设置帧率
+        self.cap.set(cv2.CAP_PROP_FPS, 30)
 
-        # 10Hz 发布
+        self.get_logger().info("USB 摄像头初始化成功")
+
         self.timer = self.create_timer(0.1, self.timer_callback)
 
     def timer_callback(self):
@@ -39,7 +45,7 @@ class FaceCameraNode(Node):
         ret, frame = self.cap.read()
 
         if not ret:
-            self.get_logger().warn("读取摄像头失败")
+            self.get_logger().warn("摄像头读取失败")
             return
 
         msg = self.bridge.cv2_to_imgmsg(frame, encoding="bgr8")
