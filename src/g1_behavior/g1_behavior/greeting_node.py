@@ -48,9 +48,9 @@ class GreetingNode(Node):
         # 相似度过滤
         if similarity < 0.6:
             return
-        # 一分钟内不重复
+        # 15s内不重复
         if name in self.last_seen:
-            if now - self.last_seen[name] < 60:
+            if now - self.last_seen[name] < 15:
                 return
         self.last_seen[name] = now
 
