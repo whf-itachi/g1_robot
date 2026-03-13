@@ -37,6 +37,7 @@ class MotionController:
         # self.motion.WaveHand()
         self.motion.ShakeHand()
         time.sleep(1.0)
+        self.motion.HighStand()
         self.state = "IDLE"
 
     def is_moving(self):

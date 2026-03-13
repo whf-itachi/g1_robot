@@ -19,7 +19,14 @@ def generate_launch_description():
             output="screen"  # 建议加上这一行，方便在终端看到识别出的名字
         ),
 
-        # 3. 语音/动作响应节点（保持不变）
+        # 3. 人脸识别节点
+        Node(
+            package="g1_face",
+            executable="face_node",
+            output="screen"
+        ),
+
+        # 4. 语音/动作响应节点（保持不变）
         Node(
             package="g1_behavior",
             executable="greeting_node"
