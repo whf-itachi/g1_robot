@@ -37,6 +37,8 @@ class G1DebugNode(Node):
 
             elif cmd == "shake":
                 self.controller.motion.ShakeHand()
+                time.sleep(1.0)
+                self.controller.motion.HighStand()
 
             elif cmd == "sit":
                 self.controller.motion.Sit()
@@ -48,7 +50,7 @@ class G1DebugNode(Node):
                 self.controller.motion.Move(0.2, 0.0, 0.0)
 
             elif cmd == "stop":
-                self.controller.motion.StopMove()
+                self.controller.stop()
 
             elif cmd == "quit":
                 break

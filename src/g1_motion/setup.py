@@ -4,7 +4,7 @@ package_name = 'g1_motion'
 
 setup(
     name=package_name,
-    version='0.0.0',
+    version='0.1.0',
     packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages',
@@ -13,10 +13,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='haitch',
-    maintainer_email='haitch@todo.todo',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    maintainer='Nathan',
+    maintainer_email='service02@haitch.cn',
+    description='G1 机器人运动控制包 - 基于 unitree_sdk2py 的动作执行和控制',
+    license='Apache-2.0',
     extras_require={
         'test': [
             'pytest',

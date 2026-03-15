@@ -3,10 +3,10 @@
 <package format="3">
 
   <name>g1_interfaces</name>
-  <version>0.0.0</version>
-  <description>Custom message interfaces for G1 robot</description>
+  <version>0.1.0</version>
+  <description>G1 机器人自定义消息接口包 - 包含人脸结果和运动指令消息</description>
 
-  <maintainer email="haitch@todo.todo">haitch</maintainer>
+  <maintainer email="service02@haitch.cn">Nathan</maintainer>
   <license>Apache-2.0</license>
 
   <!-- 构建工具 -->

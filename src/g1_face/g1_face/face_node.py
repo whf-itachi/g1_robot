@@ -25,16 +25,11 @@ class FaceNode(Node):
         self.detector.prepare(ctx_id=0)
 
         # 使用包共享目录中的数据文件
-        db_path = os.path.expanduser("~/haitch/g1_robot/data/face_database.json")
-        # 如果包路径下没有，则尝试相对路径
-        if not os.path.exists(db_path):
-            db_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                'data', 'face_database.json'
-            )
+        package_share_dir = get_package_share_directory('g1_face')
+        db_path = os.path.join(package_share_dir, 'data', 'face_database.json')
 
         self.db = FaceDatabase(db_path)
-        self.get_logger().info(f"database size: {len(self.db.data)}")
+        self.get_logger().info(f"人脸识别节点就绪，数据库大小：{len(self.db.data)}")
 
         self.sub = self.create_subscription(
             Image,

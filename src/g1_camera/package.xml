@@ -2,14 +2,15 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>g1_camera</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="haitch@todo.todo">haitch</maintainer>
-  <license>TODO: License declaration</license>
+  <version>0.1.0</version>
+  <description>G1 机器人相机包 - 处理机器人视频流解码和 USB 摄像头图像发布</description>
+  <maintainer email="service02@haitch.cn">Nathan</maintainer>
+  <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>cv_bridge</depend>
+  <depend>unitree_go</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
