@@ -1,12 +1,13 @@
 import time
 import threading
+import traceback
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
 
 class MotionController:
     """
     G1 机器人运动控制器
-    
+
     状态机:
         IDLE     - 空闲状态，可接受新指令
         GREETING - 正在执行问候动作
@@ -15,12 +16,17 @@ class MotionController:
     """
 
     def __init__(self):
-        self.motion = LocoClient()
-        self.motion.Init()
-        self.motion.WaitLeaseApplied()
-        self.motion.Start()
-        self.motion.HighStand()
-        
+        try:
+            self.motion = LocoClient()
+            self.motion.Init()
+            self.motion.WaitLeaseApplied()
+            self.motion.Start()
+            self.motion.HighStand()
+        except Exception as e:
+            print(f"Error initializing LocoClient: {e}")
+            print(traceback.format_exc())
+            raise
+
         self._state = "IDLE"
         self._lock = threading.Lock()
 
@@ -36,26 +42,36 @@ class MotionController:
 
     def stop(self):
         """停止机器人当前动作"""
-        if self._get_state() == "STOPPING":
-            return
-        
-        self._set_state("STOPPING")
-        self.motion.StopMove()
-        self._set_state("IDLE")
+        try:
+            if self._get_state() == "STOPPING":
+                return
+
+            self._set_state("STOPPING")
+            self.motion.StopMove()
+            self._set_state("IDLE")
+        except Exception as e:
+            print(f"Error stopping robot: {e}")
+            print(traceback.format_exc())
 
     def wave_hand(self):
         """执行挥手/握手动作"""
-        current_state = self._get_state()
-        if current_state == "GREETING":
-            return
-        if current_state in ["STOPPING", "MOVING"]:
-            self.stop()
-        
-        self._set_state("GREETING")
-        self.motion.ShakeHand()
-        time.sleep(1.0)
-        self.motion.HighStand()
-        self._set_state("IDLE")
+        try:
+            current_state = self._get_state()
+            if current_state == "GREETING":
+                return
+            if current_state in ["STOPPING", "MOVING"]:
+                self.stop()
+
+            self._set_state("GREETING")
+            self.motion.ShakeHand()
+            time.sleep(1.0)
+            self.motion.HighStand()
+            self._set_state("IDLE")
+        except Exception as e:
+            print(f"Error executing wave hand: {e}")
+            print(traceback.format_exc())
+            # 确保状态被重置
+            self._set_state("IDLE")
 
     def is_moving(self):
         """判断机器人是否正在移动"""

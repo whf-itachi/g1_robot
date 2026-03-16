@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+import traceback
 
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 
@@ -17,6 +18,7 @@ class MotionNode(Node):
             self.get_logger().info("SDK Channel Factory initialized successfully.")
         except Exception as e:
             self.get_logger().error(f"Failed to initialize SDK: {e}")
+            self.get_logger().error(traceback.format_exc())
             raise e
 
         self.get_logger().info("Creating MotionController...")
@@ -25,24 +27,34 @@ class MotionNode(Node):
             self.get_logger().info("MotionController created and ready.")
         except Exception as e:
             self.get_logger().error(f"Failed to create MotionController: {e}")
+            self.get_logger().error(traceback.format_exc())
             raise e
 
-        self.sub = self.create_subscription(
-            MotionCmd,
-            "/motion/cmd",
-            self.cmd_callback,
-            10
-        )
+        try:
+            self.sub = self.create_subscription(
+                MotionCmd,
+                "/motion/cmd",
+                self.cmd_callback,
+                10
+            )
+            self.get_logger().info("MotionNode subscription created successfully.")
+        except Exception as e:
+            self.get_logger().error(f"Failed to create motion command subscription: {e}")
+            raise e
 
 
     def cmd_callback(self, msg):
-        self.get_logger().info(f"Motion cmd received: {msg.cmd}")
-        if msg.cmd == "wave_hand":
-            self.get_logger().info("Robot wave hand")
-            self.controller.wave_hand()
+        try:
+            self.get_logger().info(f"Motion cmd received: {msg.cmd}")
+            if msg.cmd == "wave_hand":
+                self.get_logger().info("Robot wave hand")
+                self.controller.wave_hand()
 
-        elif msg.cmd == "stop":
-            self.controller.stop()
+            elif msg.cmd == "stop":
+                self.controller.stop()
+        except Exception as e:
+            self.get_logger().error(f"Error processing motion command: {e}")
+            self.get_logger().error(traceback.format_exc())
 
 
 def main(args=None):
