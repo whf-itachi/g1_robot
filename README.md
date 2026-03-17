@@ -66,7 +66,7 @@ ros2 launch g1_behavior g1_system.launch.py
 
 系统会自动启动以下节点：
 1. `motion_node` - 运动控制
-2. `face_node_direct` - USB 摄像头图像发布
+2. `face_node_direct` - 从其他节点中获取图像并转发
 3. `face_node` - 人脸识别
 4. `greeting_node` - 问候行为响应
 
@@ -78,6 +78,9 @@ ros2 run g1_motion motion_node
 
 # 人脸识别节点
 ros2 run g1_face face_node
+
+# 图像转发节点
+ros2 run g1_camera face_node_direct
 
 # 行为响应节点
 ros2 run g1_behavior greeting_node
@@ -101,6 +104,7 @@ ros2 run g1_motion g1_debug
 | 话题名 | 消息类型 | 订阅节点 |
 |--------|----------|----------|
 | `/frontvideostream` | `unitree_go/msg/Go2FrontVideoData` | `camera_node` |
+| `/c920/image_raw` | `sensor_msgs/msg/Image` | `face_node_direct` |
 | `/camera/standard_image` | `sensor_msgs/msg/Image` | `face_node` |
 | `/face/result` | `g1_interfaces/msg/FaceResult` | `greeting_node` |
 | `/motion/cmd` | `g1_interfaces/msg/MotionCmd` | `motion_node` |
@@ -154,7 +158,7 @@ ros2 run g1_motion g1_debug
          │                    ▼                    │          │
          │  ┌──────────────────────────┐          │          │
          │  │   face_node_direct       │          │          │
-         │  │   (USB 摄像头图像发布)     │          │          │
+         │  │   (图像转发/桥接)        │          │          │
          │  └──────────────────────────┘          │          │
          │                    │                    │          │
          │                    ▼                    │          │
