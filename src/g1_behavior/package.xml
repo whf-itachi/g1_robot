@@ -3,13 +3,14 @@
 <package format="3">
   <name>g1_behavior</name>
   <version>0.1.0</version>
-  <description>G1 机器人行为响应包 - 处理人脸识别后的问候和交互行为</description>
+  <description>G1 机器人面部行为响应包 - 处理人脸识别后的多种行为（如问候、API请求等）</description>
   <maintainer email="service02@haitch.cn">Nathan</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>g1_interfaces</depend>
   <depend>unitree_sdk2py</depend>
+  <exec_depend>websocket-client</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

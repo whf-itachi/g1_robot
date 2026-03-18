@@ -2,6 +2,7 @@
 build/
 install/
 log/
+*.log
 
 # --- Python 缓存与字节码 ---
 __pycache__/

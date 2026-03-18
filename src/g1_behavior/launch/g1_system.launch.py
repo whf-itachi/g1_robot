@@ -25,6 +25,6 @@ def generate_launch_description():
         # 4. 语音/动作响应节点
         Node(
             package="g1_behavior",
-            executable="greeting_node"
+            executable="face_behavior_node"
         )
     ])

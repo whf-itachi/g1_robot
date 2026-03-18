@@ -13,7 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), ['launch/g1_system.launch.py']),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'websocket-client', 'pytz', 'requests'],
     zip_safe=True,
     maintainer='Nathan',
     maintainer_email='service02@haitch.cn',
@@ -26,7 +26,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'greeting_node = g1_behavior.greeting_node:main',
+            'face_behavior_node = g1_behavior.face_behavior_node:main',
         ],
     },
 )

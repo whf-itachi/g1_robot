@@ -17,7 +17,7 @@ class MotionNode(Node):
 
         self.get_logger().info("Initializing Unitree SDK Channel Factory...")
         try:
-            ChannelFactoryInitialize(0)
+            ChannelFactoryInitialize(1)
             self.get_logger().info("SDK Channel Factory initialized successfully.")
         except Exception as e:
             self.get_logger().error(f"Failed to initialize SDK: {e}")
@@ -48,13 +48,23 @@ class MotionNode(Node):
 
     def cmd_callback(self, msg):
         try:
-            self.get_logger().info(f"Motion cmd received: {msg.cmd}")
+            self.get_logger().info(f"Motion cmd received: {msg.cmd}, param: {msg.param}")
             if msg.cmd == "wave_hand":
                 self.get_logger().info("Robot wave hand")
+                self.get_logger().info(f"[DEBUG] About to call controller.wave_hand() for param: {msg.param}")
                 self.controller.wave_hand()
+                self.get_logger().info(f"[DEBUG] controller.wave_hand() completed")
+
+            elif msg.cmd == "natural_greeting":
+                self.get_logger().info("Robot performing natural greeting")
+                self.get_logger().info(f"[DEBUG] About to call controller.natural_greeting()")
+                self.controller.natural_greeting()
+                self.get_logger().info(f"[DEBUG] controller.natural_greeting() completed")
 
             elif msg.cmd == "stop":
+                self.get_logger().info(f"[DEBUG] About to call controller.stop()")
                 self.controller.stop()
+                self.get_logger().info(f"[DEBUG] controller.stop() completed")
         except Exception as e:
             self.get_logger().error(f"Error processing motion command: {e}")
             self.get_logger().error(traceback.format_exc())

@@ -25,7 +25,7 @@ g1_robot/
 | `g1_camera` | 视频流解码/USB 摄像头 | ament_python | `camera_node`, `face_node_direct` |
 | `g1_face` | InsightFace 人脸识别 | ament_python | `face_node` |
 | `g1_motion` | unitree_sdk2py 运动控制 | ament_python | `motion_node`, `g1_debug` |
-| `g1_behavior` | 问候和交互行为 | ament_python | `greeting_node` |
+| `g1_behavior` | 面部行为响应（支持打招呼、企业微信通知等） | ament_python | `face_behavior_node` |
 
 ## 🔧 环境要求
 
@@ -36,7 +36,7 @@ g1_robot/
 ### Python 依赖
 
 ```bash
-pip install insightface opencv-python numpy
+pip install insightface opencv-python numpy websocket-client pytz requests
 ```
 
 ### 宇树 SDK
@@ -68,7 +68,7 @@ ros2 launch g1_behavior g1_system.launch.py
 1. `motion_node` - 运动控制
 2. `face_node_direct` - 从其他节点中获取图像并转发
 3. `face_node` - 人脸识别
-4. `greeting_node` - 问候行为响应
+4. `face_behavior_node` - 面部行为响应
 
 ### 3. 单独启动节点
 
@@ -83,7 +83,7 @@ ros2 run g1_face face_node
 ros2 run g1_camera face_node_direct
 
 # 行为响应节点
-ros2 run g1_behavior greeting_node
+ros2 run g1_behavior face_behavior_node
 
 # G1 调试控制台（手动控制机器人动作）
 ros2 run g1_motion g1_debug
@@ -96,7 +96,7 @@ ros2 run g1_motion g1_debug
 | 话题名 | 消息类型 | 发布节点 |
 |--------|----------|----------|
 | `/face/result` | `g1_interfaces/msg/FaceResult` | `face_node` |
-| `/motion/cmd` | `g1_interfaces/msg/MotionCmd` | `greeting_node` |
+| `/motion/cmd` | `g1_interfaces/msg/MotionCmd` | `face_behavior_node` |
 | `/camera/standard_image` | `sensor_msgs/msg/Image` | `face_node_direct` |
 
 ### 订阅的话题
@@ -106,7 +106,7 @@ ros2 run g1_motion g1_debug
 | `/frontvideostream` | `unitree_go/msg/Go2FrontVideoData` | `camera_node` |
 | `/c920/image_raw` | `sensor_msgs/msg/Image` | `face_node_direct` |
 | `/camera/standard_image` | `sensor_msgs/msg/Image` | `face_node` |
-| `/face/result` | `g1_interfaces/msg/FaceResult` | `greeting_node` |
+| `/face/result` | `g1_interfaces/msg/FaceResult` | `face_behavior_node` |
 | `/motion/cmd` | `g1_interfaces/msg/MotionCmd` | `motion_node` |
 
 ## 📝 自定义消息
@@ -169,8 +169,8 @@ ros2 run g1_motion g1_debug
          │                │ /face/result          │          │
          │                ▼                       │          │
          │  ┌──────────────────────────┐          │          │
-         │  │   greeting_node          │          │          │
-         │  │   (行为决策)             │          │          │
+         │  │   face_behavior_node     │          │          │
+         │  │   (面部行为响应)         │          │          │
          │  └─────────────┬────────────┘          │          │
          │                │ /motion/cmd           │          │
          │                ▼                       │          │
