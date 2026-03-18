@@ -1,3 +1,6 @@
+"""
+接收摄像头节点数据并进行人脸识别，将人脸识别结果进行发布到 /face/result 话题
+"""
 import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory

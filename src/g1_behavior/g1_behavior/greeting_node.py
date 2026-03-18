@@ -1,3 +1,6 @@
+"""
+接收人脸识别结果，当检测到已知面孔时触发问候行为（语音和动作）
+"""
 import rclpy
 from rclpy.node import Node
 

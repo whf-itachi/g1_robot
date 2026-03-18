@@ -1,3 +1,6 @@
+"""
+（以弃用，暂时保留）接收来自Go2机器人的前置摄像头视频流，解码后发布到ROS2话题系统
+"""
 import rclpy
 from rclpy.node import Node
 import cv2

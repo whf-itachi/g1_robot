@@ -1,3 +1,6 @@
+"""
+接收运动命令并控制G1机器人执行相应的动作（如挥手、停止等）
+"""
 import rclpy
 from rclpy.node import Node
 import traceback

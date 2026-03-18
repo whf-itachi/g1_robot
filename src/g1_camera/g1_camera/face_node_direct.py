@@ -1,3 +1,6 @@
+"""
+从外部摄像头源（如USB摄像头）接收图像并转发到人脸识别系统
+"""
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image

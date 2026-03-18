@@ -1,3 +1,7 @@
+"""
+G1机器人调试节点，提供交互式命令行界面用于测试机器人动作：
+ros2 run g1_motion g1_debug_node
+"""
 import rclpy
 from rclpy.node import Node
 import threading
