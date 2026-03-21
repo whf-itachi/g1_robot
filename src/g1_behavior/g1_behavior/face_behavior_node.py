@@ -34,10 +34,10 @@ class FaceBehaviorNode(Node):
             )
             self.get_logger().info("Face result subscriber created successfully")
             
-            # 订阅图像话题，用于获取人脸识别的图像
+            # 订阅图像话题，用于获取人脸识别的图像 用于发送给企微
             self.image_sub = self.create_subscription(
                 Image,
-                "/camera/standard_image",  # 假设这是图像话题
+                "/camera/standard_image",
                 self.image_callback,
                 10
             )

@@ -13,16 +13,13 @@ pip install websocket-client
 from abc import ABC, abstractmethod
 from g1_interfaces.msg import FaceResult
 import threading
-from typing import Dict, Any
+from typing import Dict
 import rclpy
 from rclpy.node import Node
-import time
 
 from threading import Thread, Lock
 
-from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
-from g1_interfaces.msg import MotionCmd
+from common.unitree_client import UnitreeClient
 
 # 企业微信相关导入
 try:
@@ -38,9 +35,6 @@ import uuid
 import ssl
 from datetime import datetime, timezone
 import pytz
-import requests
-import tempfile
-import os
 from cv_bridge import CvBridge
 import cv2
 
@@ -138,28 +132,17 @@ class GreetingHandler(FaceResultHandler):
     打招呼处理器
     当检测到已知面孔时触发问候行为（语音和动作）
     """
-    
+
     def __init__(self, node: Node):
         self.node = node
-        self.audio_client = None
         
+        # 初始化UnitreeClient用于直接控制机器人
         try:
-            ChannelFactoryInitialize(1)  # 初始化 DDS 通信通道
-            self.node.get_logger().info("Greeting handler initialized")
+            self.unitree_client = UnitreeClient()
+            self.node.get_logger().info("UnitreeClient initialized for direct robot control")
         except Exception as e:
-            self.node.get_logger().error(f"Failed to initialize DDS communication channel: {e}")
+            self.node.get_logger().error(f"Failed to initialize UnitreeClient: {e}")
             raise
-
-        # 初始化音频客户端
-        try:
-            self.audio_client = AudioClient()
-            self.audio_client.Init()
-            self.audio_client.SetTimeout(10.0)
-            self.audio_client.SetVolume(80)  # 设置音量为80%
-            self.node.get_logger().info("Audio client initialized successfully")
-        except Exception as e:
-            self.node.get_logger().error(f"Failed to initialize audio client: {e}")
-            self.audio_client = None
 
         # 人脸去重记录 {name: timestamp}
         self.last_seen = {}
@@ -171,13 +154,6 @@ class GreetingHandler(FaceResultHandler):
         # 添加锁来保护共享资源
         self.state_lock = Lock()  # 保护self.robot_state变量避免多个地方修改
         self.seen_lock = Lock()  # 保护人脸字典多个地方修改
-        
-        # 发布动作
-        self.motion_pub = self.node.create_publisher(
-            MotionCmd,
-            "/motion/cmd",
-            10
-        )
 
     def handle(self, face_result: FaceResult) -> bool:
         """
@@ -242,7 +218,7 @@ class GreetingHandler(FaceResultHandler):
             name: 检测到的人名
         """
         self.node.get_logger().info(f"[DEBUG] Starting greeting sequence for {name}")
-        
+
         # 执行打招呼
         with self.state_lock:
             self.robot_state = "GREETING"
@@ -258,18 +234,18 @@ class GreetingHandler(FaceResultHandler):
 
         def play_motion():
             self.node.get_logger().info(f"[DEBUG] Starting motion thread for {name}")
-            # 发布挥手命令（这是最明确的挥手动作）
-            cmd = MotionCmd()
-            cmd.cmd = "wave_hand"
-            cmd.param = name
-
             try:
-                # 执行挥手动作
-                self.node.get_logger().info(f"Publishing wave_hand command for {name}")
-                self.motion_pub.publish(cmd)
-                self.node.get_logger().info(f"[DEBUG] Wave hand command published successfully for {name}")
+                # 直接执行挥手动作
+                self.node.get_logger().info(f"Executing wave_hand action for {name}")
+                self.unitree_client.shake_hand()
+                # 等待动作完成
+                import time
+                time.sleep(10.0)  # 等待握手动作完成
+                # 回到站立状态
+                self.unitree_client.high_stand()
+                self.node.get_logger().info(f"[DEBUG] Wave hand action completed successfully for {name}")
             except Exception as e:
-                self.node.get_logger().error(f"Failed to publish motion command: {e}")
+                self.node.get_logger().error(f"Failed to execute motion command: {e}")
                 import traceback
                 self.node.get_logger().error(f"Motion command error details: {traceback.format_exc()}")
 
@@ -303,22 +279,24 @@ class GreetingHandler(FaceResultHandler):
             name: 检测到的人名
         """
         self.node.get_logger().info(f"[DEBUG] Starting audio greeting for {name}")
-        
+
         # 播放英文语音问候
-        if self.audio_client:
-            self.node.get_logger().info(f"[DEBUG] Audio client is available, proceeding with TTS")
+        if self.unitree_client:
+            self.node.get_logger().info(f"[DEBUG] Unitree client is available, proceeding with TTS")
             try:
                 greeting_text = f"Nice to meet you {name}!"
                 self.node.get_logger().info(f"Playing greeting: {greeting_text}")
-                
+
                 self.node.get_logger().info(f"[DEBUG] Setting LED to green")
-                self.audio_client.LedControl(0, 255, 0)  # 设置LED为绿色
-                
+                # 使用UnitreeClient控制LED
+                self.unitree_client.led_control(0, 255, 0)  # 设置LED为绿色
+
                 self.node.get_logger().info(f"[DEBUG] Calling TTS Maker with text: {greeting_text}")
-                result = self.audio_client.TtsMaker(greeting_text, 1)  # 播放英文问候语
+                # 使用UnitreeClient播放TTS
+                result = self.unitree_client.speak(greeting_text, 80)  # 播放英文问候语，音量80%
 
                 # 检查TTS是否成功
-                if result:
+                if result and result.get("status") == "success":
                     self.node.get_logger().info("TTS playback initiated successfully")
                 else:
                     self.node.get_logger().warning("TTS playback initiation failed")
@@ -337,19 +315,20 @@ class GreetingHandler(FaceResultHandler):
                 # 确保LED最终被关闭
                 try:
                     self.node.get_logger().info(f"[DEBUG] Turning off LED")
-                    self.audio_client.LedControl(0, 0, 0)  # 关闭LED
+                    # 使用UnitreeClient关闭LED
+                    self.unitree_client.led_control(0, 0, 0)  # 关闭LED
                     self.node.get_logger().info(f"[DEBUG] LED turned off successfully")
                 except Exception as e:
                     self.node.get_logger().error(f"Failed to turn off LED: {e}")
         else:
-            self.node.get_logger().warning("Audio client not available, skipping audio greeting")
+            self.node.get_logger().warning("Unitree client not available, skipping audio greeting")
             # 添加额外的日志以便调试
-            self.node.get_logger().info(f"Audio client status: {self.audio_client}")
+            self.node.get_logger().info(f"Unitree client status: {self.unitree_client}")
 
         # 同时输出日志
         text = f"Hello {name}"
         self.node.get_logger().info(text)
-        
+
         self.node.get_logger().info(f"[DEBUG] Audio greeting for {name} completed")
 
 
