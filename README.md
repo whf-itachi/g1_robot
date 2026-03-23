@@ -3,6 +3,12 @@
 宇树 G1 机器人二次开发 ROS2 包，实现人脸识别、运动控制和智能交互功能。
 **重构版本：采用分离架构，解决ROS2 + Unitree SDK混在单进程中导致的DDS冲突问题**
 
+### 语音交互功能
+- **音频处理**: 新增公共音频处理模块 (common.audio_handler)，提供语音输入输出功能
+- **语音输出**: 通过公共音频模块提供本地语音合成功能，提升打招呼体验
+- **语音输入**: 集成语音识别功能，支持语音交互（预留接口）
+- **设备兼容**: 自动适配各种音频设备（麦克风、扬声器）
+
 ## 📦 包结构
 
 ```
@@ -12,7 +18,7 @@ g1_robot/
 ├── unitree_control_server.py   # Unitree SDK控制服务器（独立进程）
 ├── start_system.sh             # 系统启动脚本
 ├── src/
-│   ├── common/                 # 共享组件
+│   ├── common/                 # 共享组件,unitree sdk调用以及音频的输出输出模块
 │   ├── g1_interfaces/          # 自定义消息接口
 │   ├── g1_camera/              # 相机视频流处理
 │   ├── g1_face/                # 人脸识别
@@ -39,6 +45,14 @@ g1_robot/
 
 ```bash
 pip install insightface opencv-python numpy websocket-client pytz requests
+```
+
+### 语音功能依赖（可选）
+
+```bash
+pip install pyttsx3      # 文本转语音
+pip install vosk         # 语音识别  
+pip install sounddevice  # 音频输入输出
 ```
 
 ### 宇树 SDK
@@ -164,8 +178,6 @@ string name         # 识别出的人名
 float32 similarity  # 相似度 (0.0-1.0)
 string source       # 识别来源
 ```
-
-（已移除，不再使用）
 
 ## 🛠️ 调试命令
 

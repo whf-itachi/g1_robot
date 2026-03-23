@@ -16,10 +16,12 @@ import threading
 from typing import Dict
 import rclpy
 from rclpy.node import Node
+import time
 
 from threading import Thread, Lock
 
 from common.unitree_client import UnitreeClient
+from common.audio_handler import get_audio_handler
 
 # 企业微信相关导入
 try:
@@ -30,7 +32,6 @@ except ImportError:
     print("Warning: websocket-client not installed. Install with: pip install websocket-client")
 
 import json
-import time
 import uuid
 import ssl
 from datetime import datetime, timezone
@@ -135,7 +136,7 @@ class GreetingHandler(FaceResultHandler):
 
     def __init__(self, node: Node):
         self.node = node
-        
+
         # 初始化UnitreeClient用于直接控制机器人
         try:
             self.unitree_client = UnitreeClient()
@@ -143,6 +144,17 @@ class GreetingHandler(FaceResultHandler):
         except Exception as e:
             self.node.get_logger().error(f"Failed to initialize UnitreeClient: {e}")
             raise
+
+        # 初始化音频处理器
+        try:
+            self.audio_handler = get_audio_handler()
+            if self.audio_handler:
+                self.node.get_logger().info("AudioHandler initialized for speech output")
+            else:
+                self.node.get_logger().warning("Failed to initialize AudioHandler, using fallback TTS")
+        except Exception as e:
+            self.node.get_logger().error(f"Failed to initialize AudioHandler: {e}")
+            self.audio_handler = None
 
         # 人脸去重记录 {name: timestamp}
         self.last_seen = {}
@@ -280,50 +292,55 @@ class GreetingHandler(FaceResultHandler):
         """
         self.node.get_logger().info(f"[DEBUG] Starting audio greeting for {name}")
 
-        # 播放英文语音问候
-        if self.unitree_client:
-            self.node.get_logger().info(f"[DEBUG] Unitree client is available, proceeding with TTS")
-            try:
-                greeting_text = f"Nice to meet you {name}!"
-                self.node.get_logger().info(f"Playing greeting: {greeting_text}")
+        # 播放问候语音
+        try:
+            greeting_text = f"Hello {name}! Nice to meet you!"
+            self.node.get_logger().info(f"Playing greeting: {greeting_text}")
 
-                self.node.get_logger().info(f"[DEBUG] Setting LED to green")
-                # 使用UnitreeClient控制LED
-                self.unitree_client.led_control(0, 255, 0)  # 设置LED为绿色
+            self.node.get_logger().info(f"[DEBUG] Setting LED to green")
+            # 使用UnitreeClient控制LED
+            self.unitree_client.led_control(0, 255, 0)  # 设置LED为绿色
 
-                self.node.get_logger().info(f"[DEBUG] Calling TTS Maker with text: {greeting_text}")
+            # 尝试使用新的音频处理器播放语音
+            if self.audio_handler:
+                self.node.get_logger().info(f"[DEBUG] Using new audio handler for speech")
+                success = self.audio_handler.speak_text(greeting_text, blocking=True)
+                if success:
+                    self.node.get_logger().info("New audio handler speech playback successful")
+                else:
+                    self.node.get_logger().warning("New audio handler speech playback failed, falling back to Unitree TTS")
+                    # 如果新音频处理器失败，回退到Unitree的TTS
+                    result = self.unitree_client.speak(greeting_text, 80)
+            else:
+                self.node.get_logger().info(f"[DEBUG] Audio handler not available, using Unitree TTS")
                 # 使用UnitreeClient播放TTS
-                result = self.unitree_client.speak(greeting_text, 80)  # 播放英文问候语，音量80%
-
+                result = self.unitree_client.speak(greeting_text, 80)  # 播放问候语，音量80%
+                
                 # 检查TTS是否成功
                 if result and result.get("status") == "success":
                     self.node.get_logger().info("TTS playback initiated successfully")
                 else:
                     self.node.get_logger().warning("TTS playback initiation failed")
 
-                # 等待语音播放完成，固定等待5秒
-                import time
-                estimated_duration = 5.0  # 固定等待5秒
-                self.node.get_logger().info(f"[DEBUG] Fixed audio duration: {estimated_duration}s, sleeping...")
-                time.sleep(estimated_duration)
-                self.node.get_logger().info(f"[DEBUG] Audio playback sleep completed")
+            # 等待语音播放完成，根据语音长度动态调整等待时间 估算语音长度（每个词约0.5秒）
+            word_count = len(greeting_text.split())
+            estimated_duration = max(3.0, word_count * 0.5)  # 至少等待3秒
+            self.node.get_logger().info(f"[DEBUG] Estimated audio duration: {estimated_duration}s, sleeping...")
+            time.sleep(estimated_duration)
+            self.node.get_logger().info(f"[DEBUG] Audio playback sleep completed")
+        except Exception as e:
+            self.node.get_logger().error(f"Failed to play audio greeting: {e}")
+            import traceback
+            self.node.get_logger().error(f"Detailed error: {traceback.format_exc()}")
+        finally:
+            # 确保LED最终被关闭
+            try:
+                self.node.get_logger().info(f"[DEBUG] Turning off LED")
+                # 使用UnitreeClient关闭LED
+                self.unitree_client.led_control(0, 0, 0)  # 关闭LED
+                self.node.get_logger().info(f"[DEBUG] LED turned off successfully")
             except Exception as e:
-                self.node.get_logger().error(f"Failed to play audio greeting: {e}")
-                import traceback
-                self.node.get_logger().error(f"Detailed error: {traceback.format_exc()}")
-            finally:
-                # 确保LED最终被关闭
-                try:
-                    self.node.get_logger().info(f"[DEBUG] Turning off LED")
-                    # 使用UnitreeClient关闭LED
-                    self.unitree_client.led_control(0, 0, 0)  # 关闭LED
-                    self.node.get_logger().info(f"[DEBUG] LED turned off successfully")
-                except Exception as e:
-                    self.node.get_logger().error(f"Failed to turn off LED: {e}")
-        else:
-            self.node.get_logger().warning("Unitree client not available, skipping audio greeting")
-            # 添加额外的日志以便调试
-            self.node.get_logger().info(f"Unitree client status: {self.unitree_client}")
+                self.node.get_logger().error(f"Failed to turn off LED: {e}")
 
         # 同时输出日志
         text = f"Hello {name}"
