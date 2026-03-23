@@ -4,10 +4,15 @@
 """
 import os
 import json
-import logging
 import threading
 from typing import Optional, Callable
 import queue
+
+# 导入日志配置
+from .logger_config import get_logger
+
+# 创建模块级日志记录器
+logger = get_logger(__name__)
 
 # 尝试导入所需的库
 try:
@@ -16,21 +21,21 @@ try:
     SOUNDDEVICE_AVAILABLE = True
 except ImportError:
     SOUNDDEVICE_AVAILABLE = False
-    print("Warning: sounddevice not installed. Install with: pip install sounddevice")
+    logger.warning("Warning: sounddevice not installed. Install with: pip install sounddevice")
 
 try:
     from vosk import Model, KaldiRecognizer
     VOSK_AVAILABLE = True
 except ImportError:
     VOSK_AVAILABLE = False
-    print("Warning: vosk not installed. Install with: pip install vosk")
+    logger.warning("Warning: vosk not installed. Install with: pip install vosk")
 
 try:
     import pyttsx3
     PYTTSX3_AVAILABLE = True
 except ImportError:
     PYTTSX3_AVAILABLE = False
-    print("Warning: pyttsx3 not installed. Install with: pip install pyttsx3")
+    logger.warning("Warning: pyttsx3 not installed. Install with: pip install pyttsx3")
 
 
 class AudioHandler:
@@ -60,7 +65,7 @@ class AudioHandler:
         self.on_speech_recognized: Optional[Callable[[str], None]] = None
 
         # 日志配置
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
 
         # 初始化
         self._init_tts_engine()
@@ -264,7 +269,7 @@ class AudioHandler:
                             partial = json.loads(self.recognizer.PartialResult())
                             partial_text = partial.get("partial", "").strip()
                             if partial_text:
-                                print(f"\rListening: {partial_text:<50}", end='', flush=True)
+                                self.logger.info(f"Listening: {partial_text}")
             except Exception as e:
                 self.logger.error(f"Error in audio listening: {e}")
                 self.is_listening = False
@@ -408,6 +413,7 @@ def get_audio_handler(model_path: str = "model", sample_rate: int = 16000) -> Op
         try:
             audio_handler = AudioHandler(model_path, sample_rate)
         except Exception as e:
-            print(f"Failed to create audio handler: {e}")
+            logger = get_logger(__name__)
+            logger.error(f"Failed to create audio handler: {e}")
             return None
     return audio_handler

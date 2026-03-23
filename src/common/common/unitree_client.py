@@ -8,6 +8,12 @@ import struct
 import threading
 import traceback
 
+# 导入日志配置
+from .logger_config import get_logger
+
+# 创建日志记录器
+logger = get_logger(__name__)
+
 
 class UnitreeClient:
     def __init__(self, server_host="127.0.0.1", server_port=9090):
@@ -24,9 +30,9 @@ class UnitreeClient:
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.server_host, self.server_port))
-            print(f"✅ Connected to Unitree Control Server at {self.server_host}:{self.server_port}")
+            logger.info(f"✅ Connected to Unitree Control Server at {self.server_host}:{self.server_port}")
         except Exception as e:
-            print(f"❌ Failed to connect to Unitree Control Server: {e}")
+            logger.error(f"❌ Failed to connect to Unitree Control Server: {e}")
             raise
     
     def _send_command(self, command_data):
@@ -61,8 +67,8 @@ class UnitreeClient:
                 return response
                 
             except Exception as e:
-                print(f"❌ Error communicating with Unitree Control Server: {e}")
-                print(traceback.format_exc())
+                logger.error(f"❌ Error communicating with Unitree Control Server: {e}")
+                logger.error(traceback.format_exc())
                 # 尝试重连
                 try:
                     self.socket.close()

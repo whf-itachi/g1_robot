@@ -1,6 +1,12 @@
 import json
 import numpy as np
 
+# 导入日志配置
+from common.logger_config import get_logger
+
+# 创建日志记录器
+logger = get_logger(__name__)
+
 
 class FaceDatabase:
 
@@ -14,13 +20,13 @@ class FaceDatabase:
             with open(self.path, 'r') as f:
                 self.data = json.load(f)
         except FileNotFoundError:
-            print(f"Warning: Face database file not found at {self.path}. Initializing empty database.")
+            logger.warning(f"Warning: Face database file not found at {self.path}. Initializing empty database.")
             self.data = {"faces": []}
         except json.JSONDecodeError as e:
-            print(f"Error: Invalid JSON in face database file {self.path}: {e}")
+            logger.error(f"Error: Invalid JSON in face database file {self.path}: {e}")
             self.data = {"faces": []}
         except Exception as e:
-            print(f"Error: Failed to load face database {self.path}: {e}")
+            logger.error(f"Error: Failed to load face database {self.path}: {e}")
             self.data = {"faces": []}
 
     def match(self, embedding, threshold=0.6):
@@ -41,8 +47,8 @@ class FaceDatabase:
 
             return name, max_sim
         except KeyError:
-            print("Error: Invalid face database format - missing 'faces' key")
+            logger.error("Error: Invalid face database format - missing 'faces' key")
             return None, 0
         except Exception as e:
-            print(f"Error during face matching: {e}")
+            logger.error(f"Error during face matching: {e}")
             return None, 0

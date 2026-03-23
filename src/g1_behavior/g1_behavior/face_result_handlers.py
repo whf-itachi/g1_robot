@@ -23,13 +23,17 @@ from threading import Thread, Lock
 from common.unitree_client import UnitreeClient
 from common.audio_handler import get_audio_handler
 
+# 导入日志配置
+from common.logger_config import get_logger
+
 # 企业微信相关导入
 try:
     import websocket
     WEBSOCKET_AVAILABLE = True
 except ImportError:
     WEBSOCKET_AVAILABLE = False
-    print("Warning: websocket-client not installed. Install with: pip install websocket-client")
+    logger = get_logger(__name__)
+    logger.warning("Warning: websocket-client not installed. Install with: pip install websocket-client")
 
 import json
 import uuid
@@ -68,6 +72,7 @@ class FaceResultProcessor:
     def __init__(self):
         self.handlers: Dict[str, FaceResultHandler] = {}
         self.lock = threading.Lock()  # 线程安全锁
+        self.logger = get_logger(self.__class__.__name__)
 
     def register_handler(self, name: str, handler: FaceResultHandler):
         """
@@ -111,21 +116,21 @@ class FaceResultProcessor:
         Args:
             face_result: 人脸识别结果消息
         """
-        print(f"[DEBUG] FaceResultProcessor.process() called with name: {face_result.name}, similarity: {face_result.similarity}")
+        self.logger.debug(f"[DEBUG] FaceResultProcessor.process() called with name: {face_result.name}, similarity: {face_result.similarity}")
         with self.lock:
-            print(f"[DEBUG] Number of handlers: {len(self.handlers)}")
+            self.logger.debug(f"[DEBUG] Number of handlers: {len(self.handlers)}")
             for name, handler in self.handlers.items():
-                print(f"[DEBUG] Processing with handler: {name}")
+                self.logger.debug(f"[DEBUG] Processing with handler: {name}")
                 try:
                     success = handler.handle(face_result)
                     if not success:
-                        print(f"Handler {name} failed to process face result")
+                        self.logger.error(f"Handler {name} failed to process face result")
                     else:
-                        print(f"Handler {name} processed face result successfully")
+                        self.logger.info(f"Handler {name} processed face result successfully")
                 except Exception as e:
-                    print(f"Error in handler {name}: {e}")
+                    self.logger.error(f"Error in handler {name}: {e}")
                     import traceback
-                    print(f"Traceback: {traceback.format_exc()}")
+                    self.logger.error(f"Traceback: {traceback.format_exc()}")
 
 
 class GreetingHandler(FaceResultHandler):
@@ -137,23 +142,26 @@ class GreetingHandler(FaceResultHandler):
     def __init__(self, node: Node):
         self.node = node
 
+        # 使用自定义日志记录器
+        self.logger = get_logger(f"{self.node.get_name()}.{self.__class__.__name__}")
+
         # 初始化UnitreeClient用于直接控制机器人
         try:
             self.unitree_client = UnitreeClient()
-            self.node.get_logger().info("UnitreeClient initialized for direct robot control")
+            self.logger.info("UnitreeClient initialized for direct robot control")
         except Exception as e:
-            self.node.get_logger().error(f"Failed to initialize UnitreeClient: {e}")
+            self.logger.error(f"Failed to initialize UnitreeClient: {e}")
             raise
 
         # 初始化音频处理器
         try:
             self.audio_handler = get_audio_handler()
             if self.audio_handler:
-                self.node.get_logger().info("AudioHandler initialized for speech output")
+                self.logger.info("AudioHandler initialized for speech output")
             else:
-                self.node.get_logger().warning("Failed to initialize AudioHandler, using fallback TTS")
+                self.logger.warning("Failed to initialize AudioHandler, using fallback TTS")
         except Exception as e:
-            self.node.get_logger().error(f"Failed to initialize AudioHandler: {e}")
+            self.logger.error(f"Failed to initialize AudioHandler: {e}")
             self.audio_handler = None
 
         # 人脸去重记录 {name: timestamp}
@@ -177,47 +185,47 @@ class GreetingHandler(FaceResultHandler):
         Returns:
             bool: 处理是否成功
         """
-        self.node.get_logger().info(f"[DEBUG] Received face result - Name: {face_result.name}, Similarity: {face_result.similarity}")
+        self.logger.info(f"[DEBUG] Received face result - Name: {face_result.name}, Similarity: {face_result.similarity}")
         
         # 获取当前机器人状态
         with self.state_lock:
             current_state = self.robot_state
 
-        self.node.get_logger().info(f"[DEBUG] Current robot state: {current_state}")
-        
+        self.logger.info(f"[DEBUG] Current robot state: {current_state}")
+
         # 如果正在打招呼 忽略
         if current_state == "GREETING":
-            self.node.get_logger().info(
+            self.logger.info(
                 f"Robot greeting, ignore!"
             )
             return True
 
         name = face_result.name
         similarity = face_result.similarity
-        self.node.get_logger().info(f"[DEBUG] Processing face recognition - Name: {name}, Similarity: {similarity}")
+        self.logger.info(f"[DEBUG] Processing face recognition - Name: {name}, Similarity: {similarity}")
         
         # 相似度过滤
         if similarity < 0.6:
-            self.node.get_logger().info(f"[DEBUG] Face similarity {similarity} is below threshold, ignoring")
+            self.logger.info(f"[DEBUG] Face similarity {similarity} is below threshold, ignoring")
             return True
 
         # 使用 ROS2 时钟进行去重检查
         now = self.node.get_clock().now().nanoseconds / 1e9
-        self.node.get_logger().info(f"[DEBUG] Checking deduplication for {name}")
+        self.logger.info(f"[DEBUG] Checking deduplication for {name}")
         with self.seen_lock:
             if name in self.last_seen:
                 time_since_last = now - self.last_seen[name]
-                self.node.get_logger().info(f"[DEBUG] Last seen {name} {time_since_last}s ago, threshold is {self.dedup_interval}s")
+                self.logger.info(f"[DEBUG] Last seen {name} {time_since_last}s ago, threshold is {self.dedup_interval}s")
                 if time_since_last < self.dedup_interval:
-                    self.node.get_logger().info(f"[DEBUG] Deduplication active, ignoring face recognition for {name}")
+                    self.logger.info(f"[DEBUG] Deduplication active, ignoring face recognition for {name}")
                     return True
             self.last_seen[name] = now
 
-        self.node.get_logger().info(
+        self.logger.info(
             f"Face detected: {name}, triggering greeting sequence"
         )
         # 使用线程 避免阻塞 ROS 回调导致 rclpy.spin 无法处理其他消息
-        self.node.get_logger().info(f"[DEBUG] Starting greeting thread for {name}")
+        self.logger.info(f"[DEBUG] Starting greeting thread for {name}")
         Thread(target=self._handle_greeting, args=(name,), daemon=True).start()
 
         return True
@@ -229,57 +237,57 @@ class GreetingHandler(FaceResultHandler):
         Args:
             name: 检测到的人名
         """
-        self.node.get_logger().info(f"[DEBUG] Starting greeting sequence for {name}")
+        self.logger.info(f"[DEBUG] Starting greeting sequence for {name}")
 
         # 执行打招呼
         with self.state_lock:
             self.robot_state = "GREETING"
-            self.node.get_logger().info(f"[DEBUG] Robot state set to GREETING")
+            self.logger.info(f"[DEBUG] Robot state set to GREETING")
 
         # 创建线程同时执行语音和动作
         import threading
 
         def play_audio():
-            self.node.get_logger().info(f"[DEBUG] Starting audio thread for {name}")
+            self.logger.info(f"[DEBUG] Starting audio thread for {name}")
             self._say_hello(name)
-            self.node.get_logger().info(f"[DEBUG] Audio thread for {name} completed")
+            self.logger.info(f"[DEBUG] Audio thread for {name} completed")
 
         def play_motion():
-            self.node.get_logger().info(f"[DEBUG] Starting motion thread for {name}")
+            self.logger.info(f"[DEBUG] Starting motion thread for {name}")
             try:
                 # 直接执行挥手动作
-                self.node.get_logger().info(f"Executing wave_hand action for {name}")
+                self.logger.info(f"Executing wave_hand action for {name}")
                 self.unitree_client.shake_hand()
                 # 等待动作完成
                 import time
                 time.sleep(10.0)  # 等待握手动作完成
                 # 回到站立状态
                 self.unitree_client.high_stand()
-                self.node.get_logger().info(f"[DEBUG] Wave hand action completed successfully for {name}")
+                self.logger.info(f"[DEBUG] Wave hand action completed successfully for {name}")
             except Exception as e:
-                self.node.get_logger().error(f"Failed to execute motion command: {e}")
+                self.logger.error(f"Failed to execute motion command: {e}")
                 import traceback
-                self.node.get_logger().error(f"Motion command error details: {traceback.format_exc()}")
+                self.logger.error(f"Motion command error details: {traceback.format_exc()}")
 
         # 并发执行语音和动作
         audio_thread = threading.Thread(target=play_audio)
         motion_thread = threading.Thread(target=play_motion)
 
-        self.node.get_logger().info(f"[DEBUG] Starting audio and motion threads for {name}")
+        self.logger.info(f"[DEBUG] Starting audio and motion threads for {name}")
         audio_thread.start()
         motion_thread.start()
 
         # 等待两个线程完成
-        self.node.get_logger().info(f"[DEBUG] Waiting for audio and motion threads to complete for {name}")
+        self.logger.info(f"[DEBUG] Waiting for audio and motion threads to complete for {name}")
         audio_thread.join()
         motion_thread.join()
-        self.node.get_logger().info(f"[DEBUG] Audio and motion threads completed for {name}")
+        self.logger.info(f"[DEBUG] Audio and motion threads completed for {name}")
 
         with self.state_lock:
             self.robot_state = "IDLE"
-            self.node.get_logger().info(f"[DEBUG] Robot state reset to IDLE")
+            self.logger.info(f"[DEBUG] Robot state reset to IDLE")
 
-        self.node.get_logger().info(
+        self.logger.info(
             f"Greeting finished: {name}"
         )
 
@@ -290,63 +298,63 @@ class GreetingHandler(FaceResultHandler):
         Args:
             name: 检测到的人名
         """
-        self.node.get_logger().info(f"[DEBUG] Starting audio greeting for {name}")
+        self.logger.info(f"[DEBUG] Starting audio greeting for {name}")
 
         # 播放问候语音
         try:
             greeting_text = f"Hello {name}! Nice to meet you!"
-            self.node.get_logger().info(f"Playing greeting: {greeting_text}")
+            self.logger.info(f"Playing greeting: {greeting_text}")
 
-            self.node.get_logger().info(f"[DEBUG] Setting LED to green")
+            self.logger.info(f"[DEBUG] Setting LED to green")
             # 使用UnitreeClient控制LED
             self.unitree_client.led_control(0, 255, 0)  # 设置LED为绿色
 
             # 尝试使用新的音频处理器播放语音
             if self.audio_handler:
-                self.node.get_logger().info(f"[DEBUG] Using new audio handler for speech")
+                self.logger.info(f"[DEBUG] Using new audio handler for speech")
                 success = self.audio_handler.speak_text(greeting_text, blocking=True)
                 if success:
-                    self.node.get_logger().info("New audio handler speech playback successful")
+                    self.logger.info("New audio handler speech playback successful")
                 else:
-                    self.node.get_logger().warning("New audio handler speech playback failed, falling back to Unitree TTS")
+                    self.logger.warning("New audio handler speech playback failed, falling back to Unitree TTS")
                     # 如果新音频处理器失败，回退到Unitree的TTS
                     result = self.unitree_client.speak(greeting_text, 80)
             else:
-                self.node.get_logger().info(f"[DEBUG] Audio handler not available, using Unitree TTS")
+                self.logger.info(f"[DEBUG] Audio handler not available, using Unitree TTS")
                 # 使用UnitreeClient播放TTS
                 result = self.unitree_client.speak(greeting_text, 80)  # 播放问候语，音量80%
-                
+
                 # 检查TTS是否成功
                 if result and result.get("status") == "success":
-                    self.node.get_logger().info("TTS playback initiated successfully")
+                    self.logger.info("TTS playback initiated successfully")
                 else:
-                    self.node.get_logger().warning("TTS playback initiation failed")
+                    self.logger.warning("TTS playback initiation failed")
 
             # 等待语音播放完成，根据语音长度动态调整等待时间 估算语音长度（每个词约0.5秒）
             word_count = len(greeting_text.split())
             estimated_duration = max(3.0, word_count * 0.5)  # 至少等待3秒
-            self.node.get_logger().info(f"[DEBUG] Estimated audio duration: {estimated_duration}s, sleeping...")
+            self.logger.info(f"[DEBUG] Estimated audio duration: {estimated_duration}s, sleeping...")
             time.sleep(estimated_duration)
-            self.node.get_logger().info(f"[DEBUG] Audio playback sleep completed")
+            self.logger.info(f"[DEBUG] Audio playback sleep completed")
         except Exception as e:
-            self.node.get_logger().error(f"Failed to play audio greeting: {e}")
+            self.logger.error(f"Failed to play audio greeting: {e}")
             import traceback
-            self.node.get_logger().error(f"Detailed error: {traceback.format_exc()}")
+            self.logger.error(f"Detailed error: {traceback.format_exc()}")
         finally:
             # 确保LED最终被关闭
             try:
-                self.node.get_logger().info(f"[DEBUG] Turning off LED")
+                self.logger.info(f"[DEBUG] Turning off LED")
                 # 使用UnitreeClient关闭LED
                 self.unitree_client.led_control(0, 0, 0)  # 关闭LED
-                self.node.get_logger().info(f"[DEBUG] LED turned off successfully")
+                self.logger.info(f"[DEBUG] LED turned off successfully")
             except Exception as e:
-                self.node.get_logger().error(f"Failed to turn off LED: {e}")
+                self.logger.error(f"Failed to turn off LED: {e}")
 
         # 同时输出日志
         text = f"Hello {name}"
-        self.node.get_logger().info(text)
+        self.logger.info(text)
 
-        self.node.get_logger().info(f"[DEBUG] Audio greeting for {name} completed")
+        self.logger.info(f"[DEBUG] Audio greeting for {name} completed")
 
 
 class WeChatWorkApiRequestHandler(FaceResultHandler):
@@ -384,10 +392,14 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             self.requests_available = True
         except ImportError:
             self.requests_available = False
-            self.node.get_logger().error("requests库未安装，请运行: pip install requests")
+            # 为WeChatWorkApiRequestHandler创建专用日志记录器
+            self.logger = get_logger(f"{self.node.get_name()}.{self.__class__.__name__}")
+            self.logger.error("requests库未安装，请运行: pip install requests")
 
         if not self.websocket_available:
-            self.node.get_logger().error("websocket库未安装，请运行: pip install websocket-client")
+            if not hasattr(self, 'logger'):
+                self.logger = get_logger(f"{self.node.get_name()}.{self.__class__.__name__}")
+            self.logger.error("websocket库未安装，请运行: pip install websocket-client")
 
         # WebSocket连接相关
         self.ws_app = None
@@ -410,8 +422,8 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         self.image_lock = threading.Lock()
 
         # 重要提醒
-        self.node.get_logger().warn("重要提醒：企业微信机器人必须先由目标用户主动发起对话，之后机器人才能主动发送消息给该用户！")
-        self.node.get_logger().info(f"配置的机器人ID: {self.bot_id}, 目标用户: {self.target_user}")
+        self.logger.warn("重要提醒：企业微信机器人必须先由目标用户主动发起对话，之后机器人才能主动发送消息给该用户！")
+        self.logger.info(f"配置的机器人ID: {self.bot_id}, 目标用户: {self.target_user}")
 
         # 尝试初始化连接
         if self.websocket_available:
@@ -450,12 +462,12 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
                 time.sleep(0.1)
             
             if self.is_connected:
-                self.node.get_logger().info("企业微信WebSocket连接初始化成功")
+                self.logger.info("企业微信WebSocket连接初始化成功")
             else:
-                self.node.get_logger().error("企业微信WebSocket连接初始化超时")
+                self.logger.error("企业微信WebSocket连接初始化超时")
                 
         except Exception as e:
-            self.node.get_logger().error(f"初始化WebSocket连接时出错: {e}")
+            self.logger.error(f"初始化WebSocket连接时出错: {e}")
     
     def _run_websocket(self):
         """运行WebSocket连接"""
@@ -488,16 +500,16 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
                         }
                     }
                     self.ws_app.send(json.dumps(ping_msg))
-                    self.node.get_logger().info(f"[INFO] 心跳发送 (req_id: {req_id})")
+                    self.logger.info(f"[INFO] 心跳发送 (req_id: {req_id})")
                 else:
-                    self.node.get_logger().info("[INFO] WebSocket未连接，跳过心跳")
+                    self.logger.info("[INFO] WebSocket未连接，跳过心跳")
             except Exception as e:
-                self.node.get_logger().error(f"[ERROR] 发送心跳失败: {e}")
+                self.logger.error(f"[ERROR] 发送心跳失败: {e}")
                 break
     
     def _on_open(self, ws):
         """连接打开时的回调"""
-        self.node.get_logger().info("[OK] WebSocket 连接已建立")
+        self.logger.info("[OK] WebSocket 连接已建立")
         # 线程安全地更新连接状态
         with self.queue_lock:
             self.is_connected = True
@@ -509,9 +521,9 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
     def _on_message(self, ws, message):
         """收到消息时的回调"""
         try:
-            self.node.get_logger().info(f"[RECV] 原始消息: {message[:200]}...")  # 只显示前200个字符避免日志过长
+            self.logger.info(f"[RECV] 原始消息: {message[:200]}...")  # 只显示前200个字符避免日志过长
             data = json.loads(message)
-            self.node.get_logger().info(f"[RECV] 解析后CMD: {data.get('cmd', 'unknown')}")
+            self.logger.info(f"[RECV] 解析后CMD: {data.get('cmd', 'unknown')}")
 
             cmd = data.get("cmd", "")
             errcode = data.get("errcode", 0)
@@ -523,17 +535,17 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             if req_id and (not cmd or cmd in ["", "unknown"]):
                 if errcode == 0:
                     # 认证成功
-                    self.node.get_logger().info("[OK] 认证成功！机器人已就绪")
+                    self.logger.info("[OK] 认证成功！机器人已就绪")
                     # 确保状态更新是线程安全的
                     with self.queue_lock:  # 使用现有的锁来保证线程安全
                         self.is_authenticated = True
                     # 启动心跳机制
                     self._start_heartbeat()
-                    self.node.get_logger().info("心跳机制已启动")
-                    self.node.get_logger().info("认证完成，现在可以发送消息（前提是用户已与机器人对话）")
+                    self.logger.info("心跳机制已启动")
+                    self.logger.info("认证完成，现在可以发送消息（前提是用户已与机器人对话）")
                 else:
                     # 认证失败
-                    self.node.get_logger().error(f"[ERROR] 认证失败: {errmsg} (errcode: {errcode})")
+                    self.logger.error(f"[ERROR] 认证失败: {errmsg} (errcode: {errcode})")
                     # 确保状态更新是线程安全的
                     with self.queue_lock:  # 使用现有的锁来保证线程安全
                         self.is_authenticated = False
@@ -542,9 +554,9 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
                 req_id = data.get("headers", {}).get("req_id", "unknown")
                 msg_type = data.get("body", {}).get("msgtype", "unknown") if "body" in data else "unknown"
                 if errcode == 0:
-                    self.node.get_logger().info(f"[OK] 消息发送成功 (req_id: {req_id}, type: {msg_type})")
+                    self.logger.info(f"[OK] 消息发送成功 (req_id: {req_id}, type: {msg_type})")
                 else:
-                    self.node.get_logger().error(f"[ERROR] 消息发送失败 {errmsg} (req_id: {req_id}, errcode: {errcode}, type: {msg_type})")
+                    self.logger.error(f"[ERROR] 消息发送失败 {errmsg} (req_id: {req_id}, errcode: {errcode}, type: {msg_type})")
 
             # 收到用户消息（被动接收）
             elif cmd == "aibot_msg_callback":
@@ -554,27 +566,27 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
 
                 if msg_type == "text":
                     text_content = body.get("text", {}).get("content", "")
-                    self.node.get_logger().info(f"[CHAT] 收到 {from_user} 的消息: {text_content}")
+                    self.logger.info(f"[CHAT] 收到 {from_user} 的消息: {text_content}")
                 else:
-                    self.node.get_logger().info(f"[CHAT] 收到 {from_user} 的{msg_type}类型消息")
+                    self.logger.info(f"[CHAT] 收到 {from_user} 的{msg_type}类型消息")
 
             # 收到事件回调
             elif cmd == "aibot_event_callback":
                 body = data.get("body", {})
                 event_info = body.get("event", {})
                 event_type = event_info.get("eventtype", "unknown")
-                self.node.get_logger().info(f"[EVENT] 收到事件: {event_type}")
+                self.logger.info(f"[EVENT] 收到事件: {event_type}")
 
         except json.JSONDecodeError:
-            self.node.get_logger().info(f"[RECV] 非JSON消息: {message[:100]}...")
+            self.logger.info(f"[RECV] 非JSON消息: {message[:100]}...")
         except Exception as e:
-            self.node.get_logger().error(f"[ERROR] 处理消息时出错: {e}")
+            self.logger.error(f"[ERROR] 处理消息时出错: {e}")
             import traceback
-            self.node.get_logger().error(f"[ERROR] 详细错误堆栈: {traceback.format_exc()}")
+            self.logger.error(f"[ERROR] 详细错误堆栈: {traceback.format_exc()}")
     
     def _on_error(self, ws, error):
         """发生错误时的回调"""
-        self.node.get_logger().error(f"[ERROR] WebSocket 错误: {error}")
+        self.logger.error(f"[ERROR] WebSocket 错误: {error}")
         # 线程安全地更新状态
         with self.queue_lock:
             self.is_connected = False
@@ -582,11 +594,11 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
     
     def _on_close(self, ws, close_status_code, close_msg):
         """连接关闭时的回调"""
-        self.node.get_logger().info(f"[INFO] WebSocket 连接已关闭")
+        self.logger.info(f"[INFO] WebSocket 连接已关闭")
         if close_status_code:
-            self.node.get_logger().info(f"       状态码: {close_status_code}")
+            self.logger.info(f"       状态码: {close_status_code}")
         if close_msg:
-            self.node.get_logger().info(f"       原因: {close_msg}")
+            self.logger.info(f"       原因: {close_msg}")
         
         # 停止心跳
         self.heartbeat_stop_event.set()
@@ -597,7 +609,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             self.is_authenticated = False
         
         # 尝试重连
-        self.node.get_logger().info("尝试重新连接...")
+        self.logger.info("尝试重新连接...")
         time.sleep(5)  # 等待5秒后重连
         self._initialize_connection()
     
@@ -615,9 +627,9 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             }
         }
         message = json.dumps(subscribe_msg, ensure_ascii=False)
-        self.node.get_logger().info(f"[SEND] 认证请求: {message}")
+        self.logger.info(f"[SEND] 认证请求: {message}")
         ws.send(message)
-        self.node.get_logger().info(f"[INFO] 已发送认证请求（req_id: {req_id}）")
+        self.logger.info(f"[INFO] 已发送认证请求（req_id: {req_id}）")
         
     def handle(self, face_result: FaceResult) -> bool:
         """
@@ -630,7 +642,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             bool: 处理是否成功
         """
         if not self.websocket_available:
-            self.node.get_logger().error("WebSocket库不可用，无法发送企业微信消息")
+            self.logger.error("WebSocket库不可用，无法发送企业微信消息")
             return False
 
         # 线程安全地检查认证状态
@@ -639,13 +651,13 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             is_connected = self.is_connected
 
         if not is_connected:
-            self.node.get_logger().error("WebSocket未连接，无法发送消息")
+            self.logger.error("WebSocket未连接，无法发送消息")
             return False
 
         if not is_authenticated:
-            self.node.get_logger().error("企业微信未认证，无法发送消息")
+            self.logger.error("企业微信未认证，无法发送消息")
             # 检查是否正在认证过程中
-            self.node.get_logger().info(f"当前连接状态: {is_connected}, 认证状态: {is_authenticated}")
+            self.logger.info(f"当前连接状态: {is_connected}, 认证状态: {is_authenticated}")
             return False
 
         # 检查是否在去重时间内
@@ -659,7 +671,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
                     # 在去重时间内，不发送消息
                     elapsed = current_time - last_sent_time
                     remaining = self.duplicate_interval - elapsed
-                    self.node.get_logger().info(f"人脸识别去重：{person_key} 在 {remaining:.0f} 秒内，跳过发送")
+                    self.logger.info(f"人脸识别去重：{person_key} 在 {remaining:.0f} 秒内，跳过发送")
                     return True  # 返回True表示处理成功（只是跳过了发送）
 
             # 更新最后发送时间
@@ -675,22 +687,22 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             # 构建要发送的消息内容
             message_content = f"人脸识别通知：\n\n**姓名**：{face_result.name}\n**相似度**：{face_result.similarity:.2f}\n**时间**：{formatted_time}"
 
-            self.node.get_logger().info(f"准备发送人脸识别信息到企业微信: {message_content}")
+            self.logger.info(f"准备发送人脸识别信息到企业微信: {message_content}")
 
             # 发送企业微信消息（包含文本和图片）
             success = self._send_wechat_work_message(message_content)
 
             if success:
-                self.node.get_logger().info("企业微信消息（含图片）发送成功")
+                self.logger.info("企业微信消息（含图片）发送成功")
             else:
-                self.node.get_logger().error("企业微信消息发送失败")
+                self.logger.error("企业微信消息发送失败")
 
             return success
 
         except Exception as e:
-            self.node.get_logger().error(f"处理企业微信API请求时发生错误: {e}")
+            self.logger.error(f"处理企业微信API请求时发生错误: {e}")
             import traceback
-            self.node.get_logger().error(f"错误详情: {traceback.format_exc()}")
+            self.logger.error(f"错误详情: {traceback.format_exc()}")
             return False
 
     def _get_lsky_token(self):
@@ -698,7 +710,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         通过Nathan账号获取Lsky Pro的Token
         """
         if not self.requests_available:
-            self.node.get_logger().error("requests库不可用，无法获取Token")
+            self.logger.error("requests库不可用，无法获取Token")
             return None
 
         try:
@@ -714,23 +726,23 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
                 "Content-Type": "application/json"
             }
 
-            self.node.get_logger().info(f"[上传] 正在使用Nathan账号登录获取Token...")
+            self.logger.info(f"[上传] 正在使用Nathan账号登录获取Token...")
             response = requests.post(url, json=data, headers=headers, timeout=30)
             result = response.json()
 
             if result.get("status") and result.get("data", {}).get("token"):
                 token = result["data"]["token"]
-                self.node.get_logger().info(f"[上传] 登录成功! Token: {token[:20]}...")
+                self.logger.info(f"[上传] 登录成功! Token: {token[:20]}...")
                 return token
             else:
                 message = result.get("message", "未知错误")
-                self.node.get_logger().error(f"[上传] 登录失败: {message}")
+                self.logger.error(f"[上传] 登录失败: {message}")
                 return None
 
         except Exception as e:
-            self.node.get_logger().error(f"[上传] 获取Token异常: {e}")
+            self.logger.error(f"[上传] 获取Token异常: {e}")
             import traceback
-            self.node.get_logger().error(f"[上传] 详细错误: {traceback.format_exc()}")
+            self.logger.error(f"[上传] 详细错误: {traceback.format_exc()}")
             return None
 
     def _upload_image_to_cloud(self, image_msg):
@@ -738,7 +750,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         使用Nathan账号上传图像到云端图床并返回URL
         """
         if not self.requests_available:
-            self.node.get_logger().error("requests库不可用，无法上传图片到云端")
+            self.logger.error("requests库不可用，无法上传图片到云端")
             return None
 
         try:
@@ -749,7 +761,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             # 获取Token
             token = self._get_lsky_token()
             if not token:
-                self.node.get_logger().error("[上传] 无法获取Token，上传失败")
+                self.logger.error("[上传] 无法获取Token，上传失败")
                 return None
 
             # 将图像消息转换为OpenCV格式
@@ -779,7 +791,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
                 )
 
                 if not success:
-                    self.node.get_logger().error("图像编码失败")
+                    self.logger.error("图像编码失败")
                     return None
 
                 encoded_image.tobytes()  # 获取字节数据
@@ -810,17 +822,17 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
 
                 if result.get("status") and result.get("data", {}).get("links", {}).get("url"):
                     image_url = result["data"]["links"]["url"]
-                    self.node.get_logger().info(f"[上传] 图片上传成功: {image_url}")
+                    self.logger.info(f"[上传] 图片上传成功: {image_url}")
                     return image_url
                 else:
                     message = result.get("message", "未知错误")
-                    self.node.get_logger().error(f"[上传] 图片上传失败: {message}")
+                    self.logger.error(f"[上传] 图片上传失败: {message}")
                     return None
 
             except Exception as e:
-                self.node.get_logger().error(f"[上传] 上传异常: {e}")
+                self.logger.error(f"[上传] 上传异常: {e}")
                 import traceback
-                self.node.get_logger().error(f"[上传] 详细错误: {traceback.format_exc()}")
+                self.logger.error(f"[上传] 详细错误: {traceback.format_exc()}")
                 return None
 
             finally:
@@ -829,9 +841,9 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
                     os.remove(temp_image_path)
 
         except Exception as e:
-            self.node.get_logger().error(f"[上传] 处理图像时出错: {e}")
+            self.logger.error(f"[上传] 处理图像时出错: {e}")
             import traceback
-            self.node.get_logger().error(f"[上传] 详细错误: {traceback.format_exc()}")
+            self.logger.error(f"[上传] 详细错误: {traceback.format_exc()}")
             return None
 
     def _send_wechat_work_message_with_url(self, content: str, image_url: str = None) -> bool:
@@ -840,7 +852,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         """
         with self.queue_lock:
             if not self.is_connected or not self.is_authenticated:
-                self.node.get_logger().error("WebSocket未连接或未认证")
+                self.logger.error("WebSocket未连接或未认证")
                 return False
 
         try:
@@ -864,16 +876,16 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             }
 
             self.ws_app.send(json.dumps(msg, ensure_ascii=False))
-            self.node.get_logger().info(f"[发送] Markdown消息 (req_id: {req_id})")
+            self.logger.info(f"[发送] Markdown消息 (req_id: {req_id})")
             if image_url:
-                self.node.get_logger().info(f"[发送] 图片URL: {image_url}")
+                self.logger.info(f"[发送] 图片URL: {image_url}")
 
             return True
 
         except Exception as e:
-            self.node.get_logger().error(f"发送企业微信消息出错: {e}")
+            self.logger.error(f"发送企业微信消息出错: {e}")
             import traceback
-            self.node.get_logger().error(f"详细错误信息: {traceback.format_exc()}")
+            self.logger.error(f"详细错误信息: {traceback.format_exc()}")
             return False
 
     def _send_wechat_work_message(self, content: str) -> bool:
@@ -882,7 +894,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         """
         with self.queue_lock:
             if not self.is_connected or not self.is_authenticated:
-                self.node.get_logger().error("WebSocket未连接或未认证")
+                self.logger.error("WebSocket未连接或未认证")
                 return False
 
         try:
@@ -898,9 +910,9 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             return True  # 操作启动成功
 
         except Exception as e:
-            self.node.get_logger().error(f"启动上传和发送线程出错: {e}")
+            self.logger.error(f"启动上传和发送线程出错: {e}")
             import traceback
-            self.node.get_logger().error(f"详细错误信息: {traceback.format_exc()}")
+            self.logger.error(f"详细错误信息: {traceback.format_exc()}")
             return False
 
     def _upload_and_send_in_thread(self, content: str):
@@ -918,13 +930,13 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             success = self._send_wechat_work_message_with_url(content, image_url)
             
             if success:
-                self.node.get_logger().info("企业微信消息（含云端图片URL）发送成功")
+                self.logger.info("企业微信消息（含云端图片URL）发送成功")
             else:
-                self.node.get_logger().error("企业微信消息发送失败")
+                self.logger.error("企业微信消息发送失败")
 
         except Exception as e:
-            self.node.get_logger().error(f"上传和发送过程中出错: {e}")
+            self.logger.error(f"上传和发送过程中出错: {e}")
             import traceback
-            self.node.get_logger().error(f"详细错误信息: {traceback.format_exc()}")
+            self.logger.error(f"详细错误信息: {traceback.format_exc()}")
     
     

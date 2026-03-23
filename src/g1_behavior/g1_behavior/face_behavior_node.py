@@ -8,19 +8,25 @@ from g1_interfaces.msg import FaceResult
 from sensor_msgs.msg import Image
 from .face_result_handlers import FaceResultProcessor, GreetingHandler, WeChatWorkApiRequestHandler
 
+# 导入日志配置
+from common.logger_config import get_logger
+
 
 class FaceBehaviorNode(Node):
 
     def __init__(self):
         super().__init__("face_behavior_node")
-        
+
+        # 使用自定义日志记录器
+        self.logger = get_logger(self.get_name())
+
         # 创建人脸识别结果处理器
         self.processor = FaceResultProcessor()
-        
+
         # 注册打招呼处理器
         greeting_handler = GreetingHandler(self)
         self.processor.register_handler("greeting", greeting_handler)
-        
+
         # 注册企业微信API请求处理器
         # wechat_api_handler = WeChatWorkApiRequestHandler(self)
         # self.processor.register_handler("wechat_api_request", wechat_api_handler)
@@ -32,8 +38,8 @@ class FaceBehaviorNode(Node):
                 self.face_callback,
                 10
             )
-            self.get_logger().info("Face result subscriber created successfully")
-            
+            self.logger.info("Face result subscriber created successfully")
+
             # 订阅图像话题，用于获取人脸识别的图像 用于发送给企微
             self.image_sub = self.create_subscription(
                 Image,
@@ -41,9 +47,9 @@ class FaceBehaviorNode(Node):
                 self.image_callback,
                 10
             )
-            self.get_logger().info("Image subscriber created successfully")
+            self.logger.info("Image subscriber created successfully")
         except Exception as e:
-            self.get_logger().error(f"Failed to create subscription: {e}")
+            self.logger.error(f"Failed to create subscription: {e}")
             raise
 
     def image_callback(self, msg):
@@ -59,12 +65,12 @@ class FaceBehaviorNode(Node):
         """
         人脸识别结果回调函数，将结果分发给所有注册的处理器
         """
-        self.get_logger().info(f"Received face result: {msg.name} with similarity {msg.similarity}")
+        self.logger.info(f"Received face result: {msg.name} with similarity {msg.similarity}")
 
         # 将人脸识别结果分发给所有处理器
-        self.get_logger().info(f"[DEBUG] About to process face result with processor")
+        self.logger.info(f"[DEBUG] About to process face result with processor")
         self.processor.process(msg)
-        self.get_logger().info(f"[DEBUG] Face result processing completed")
+        self.logger.info(f"[DEBUG] Face result processing completed")
 
 
 def main(args=None):
