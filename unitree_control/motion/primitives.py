@@ -2,6 +2,16 @@
 动作原语（底层工具箱）:
 把动作变成"机器人能执行的最小操作"
 """
+# ===== G1 右臂关节 =====
+R_SHOULDER_PITCH = 22
+R_SHOULDER_ROLL = 23
+R_SHOULDER_YAW = 24
+R_ELBOW = 25
+R_WRIST_ROLL = 26
+R_WRIST_PITCH = 27
+R_WRIST_YAW = 28
+
+
 class MotionPrimitives:
 
     def __init__(self, driver):
@@ -27,3 +37,10 @@ class MotionPrimitives:
 
     def speak(self, text, volume=80):
         self.d.speak(text, volume)
+
+    # ===== 新增：关节控制 =====
+    def set_joint(self, joint_id, q):
+        self.d.set_joint(joint_id, q)
+
+    def set_joints(self, joints_dict):
+        self.d.set_joints(joints_dict)
