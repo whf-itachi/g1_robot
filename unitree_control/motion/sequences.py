@@ -24,6 +24,7 @@ class GreetMotion(MotionBase):
         ctx.led(0, 255, 0)
 
     def update(self, ctx, dt):
+        print("greet motion update ...")
         self.timer += dt
 
         # ===== 阶段0：抬手 =====

@@ -27,17 +27,6 @@ class MotionManager:
 
         elif action == "stop_move":
             self.executor.stop()
-
-        elif action == "spin":
-            motion = SpinMotion(
-                speed=cmd.get("speed", 1.0),
-                duration=cmd.get("duration", 3.0)
-            )
-            self.executor.execute(motion)
-
-        elif action == "wave":
-            self.executor.execute(WaveMotion())
-
         else:
             raise ValueError(action)
 
@@ -60,11 +49,3 @@ class MotionManager:
         theta = cmd.get("theta", 0.0)
 
         self.driver.move(vx, vy, theta)
-
-    def greet(self, name):
-        return [
-            lambda: self.driver.set_led(0, 255, 0),
-            lambda: self.driver.speak(f"Hello {name}"),
-            WaveMotion(),
-            lambda: self.driver.set_led(0, 0, 0),
-        ]
