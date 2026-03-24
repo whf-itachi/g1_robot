@@ -3,7 +3,7 @@
 接收外部指令 & 决定做什么动作
 """
 from .executor import MotionExecutor
-from .motions import SpinMotion, WaveMotion
+from .sequences import SpinMotion, WaveMotion, GreetMotion
 
 
 class MotionManager:
@@ -53,8 +53,9 @@ class MotionManager:
         elif name == "spin":
             self.executor.execute(SpinMotion())
 
-        elif name == "stand":
-            self.driver.high_stand()
+        elif name == "greet":
+            person_name = params.get("person_name", "my friend")
+            self.executor.execute(GreetMotion(person_name))
 
         else:
             print(f"⚠️ Unknown behavior: {name}")

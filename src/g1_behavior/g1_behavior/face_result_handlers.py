@@ -240,7 +240,7 @@ class GreetingHandler(FaceResultHandler):
             # ⭐ 只做一件事：请求行为
             self.unitree_client.do_behavior(
                 "greet",
-                name=name
+                person_name=name
             )
 
         except Exception as e:
