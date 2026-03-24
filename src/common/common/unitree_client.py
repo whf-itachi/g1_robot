@@ -21,136 +21,89 @@ class UnitreeClient:
         self.server_port = server_port
         self.socket = None
         self._lock = threading.Lock()
-        
-        # 连接到Unitree控制服务器
+
         self._connect()
-    
+
     def _connect(self):
-        """连接到Unitree控制服务器"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.server_host, self.server_port))
-            logger.info(f"✅ Connected to Unitree Control Server at {self.server_host}:{self.server_port}")
+            logger.info(f"✅ Connected to Unitree Control Server")
         except Exception as e:
-            logger.error(f"❌ Failed to connect to Unitree Control Server: {e}")
+            logger.error(f"❌ Connection failed: {e}")
             raise
-    
-    def _send_command(self, command_data):
-        """发送命令到服务器并接收响应"""
+
+    def _send_command(self, data):
         with self._lock:
             try:
-                # 序列化命令
-                cmd_json = json.dumps(command_data)
-                cmd_bytes = cmd_json.encode('utf-8')
-                cmd_length = len(cmd_bytes)
-                
-                # 发送命令长度
-                self.socket.sendall(struct.pack('!I', cmd_length))
-                # 发送命令数据
-                self.socket.sendall(cmd_bytes)
-                
-                # 接收响应长度
-                response_length_data = self.socket.recv(4)
-                if not response_length_data:
-                    raise Exception("No response from server")
-                
-                response_length = struct.unpack('!I', response_length_data)[0]
-                
-                # 接收响应数据
-                response_data = self.socket.recv(response_length)
-                if not response_data:
-                    raise Exception("No response data from server")
-                
-                response_json = response_data.decode('utf-8')
-                response = json.loads(response_json)
-                
-                return response
-                
-            except Exception as e:
-                logger.error(f"❌ Error communicating with Unitree Control Server: {e}")
-                logger.error(traceback.format_exc())
-                # 尝试重连
-                try:
-                    self.socket.close()
-                except:
-                    pass
-                self._connect()
-                raise e
+                payload = json.dumps(data).encode()
+                self.socket.sendall(struct.pack('!I', len(payload)))
+                self.socket.sendall(payload)
 
-    def shake_hand(self):
-        """执行握手动作"""
+                length = struct.unpack('!I', self.socket.recv(4))[0]
+                resp = self.socket.recv(length)
+
+                return json.loads(resp.decode())
+
+            except Exception as e:
+                logger.error(f"❌ Communication error: {e}")
+                self._reconnect()
+                raise
+
+    def _reconnect(self):
         try:
-            response = self._send_command({"action": "shake_hand"})
-            return response
-        except Exception as e:
-            raise e
-    
-    def high_stand(self):
-        """站立动作"""
-        try:
-            response = self._send_command({"action": "high_stand"})
-            return response
-        except Exception as e:
-            raise e
-    
-    def sit(self):
-        """坐下动作"""
-        try:
-            response = self._send_command({"action": "sit"})
-            return response
-        except Exception as e:
-            raise e
-    
-    def stop_move(self):
-        """停止移动"""
-        try:
-            response = self._send_command({"action": "stop_move"})
-            return response
-        except Exception as e:
-            raise e
-    
-    def move(self, vx=0.0, vy=0.0, theta=0.0):
-        """移动"""
-        try:
-            response = self._send_command({
-                "action": "move",
-                "vx": vx,
-                "vy": vy,
-                "theta": theta
-            })
-            return response
-        except Exception as e:
-            raise e
-    
-    def speak(self, text, volume=80):
-        """说话"""
-        try:
-            response = self._send_command({
-                "action": "speak",
-                "text": text,
-                "volume": volume
-            })
-            return response
-        except Exception as e:
-            raise e
-    
-    def led_control(self, r=0, g=0, b=0):
-        """LED控制"""
-        try:
-            response = self._send_command({
-                "action": "led_control",
-                "r": r,
-                "g": g,
-                "b": b
-            })
-            return response
-        except Exception as e:
-            raise e
-    
+            self.socket.close()
+        except:
+            pass
+        self._connect()
+
+    # =========================
+    # ⭐ 行为接口（核心）
+    # =========================
+
+    def do_behavior(self, name, **params):
+        return self._send_command({
+            "type": "behavior",
+            "name": name,
+            "params": params
+        })
+
+    # =========================
+    # ⭐ 控制接口（连续控制）
+    # =========================
+
+    def set_velocity(self, vx=0.0, vy=0.0, theta=0.0):
+        return self._send_command({
+            "type": "control",
+            "name": "velocity",
+            "vx": vx,
+            "vy": vy,
+            "theta": theta
+        })
+
+    def stop(self):
+        return self.set_velocity(0, 0, 0)
+
+    # =========================
+    # ⭐ 系统接口
+    # =========================
+
+    def speak(self, text):
+        return self._send_command({
+            "type": "speech",
+            "text": text
+        })
+
+    def set_led(self, r, g, b):
+        return self._send_command({
+            "type": "led",
+            "r": r,
+            "g": g,
+            "b": b
+        })
+
     def destroy(self):
-        """清理资源"""
-        if self.socket:
-            try:
-                self.socket.close()
-            except:
-                pass
+        try:
+            self.socket.close()
+        except:
+            pass

@@ -140,7 +140,7 @@ chmod +x start_system.sh
 1. 启动Unitree控制服务器（独立终端）：
 ```bash
 cd ~/g1_robot
-python unitree_control_server.py
+python -m unitree_control.server
 ```
 
 2. 启动ROS2系统（另一个终端）：
@@ -199,7 +199,7 @@ sudo chmod 666 /dev/video0
 
 确保Unitree控制服务器已启动：
 ```bash
-python unitree_control_server.py
+python -m unitree_control.server
 ```
 
 ### 问题：人脸识别率低

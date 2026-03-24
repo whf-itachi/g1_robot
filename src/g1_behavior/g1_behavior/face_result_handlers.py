@@ -21,7 +21,7 @@ import time
 from threading import Thread, Lock
 
 from common.unitree_client import UnitreeClient
-from common.audio_handler import get_audio_handler
+from common.audio_handler import AudioHandler
 
 # 导入日志配置
 from common.logger_config import get_logger
@@ -145,17 +145,19 @@ class GreetingHandler(FaceResultHandler):
         # 使用自定义日志记录器
         self.logger = get_logger(f"{self.node.get_name()}.{self.__class__.__name__}")
 
-        # 初始化UnitreeClient用于直接控制机器人
+        # 初始化UnitreeClient用于直接控制机器人，但允许连接失败
+        self.unitree_client = None
         try:
             self.unitree_client = UnitreeClient()
             self.logger.info("UnitreeClient initialized for direct robot control")
         except Exception as e:
             self.logger.error(f"Failed to initialize UnitreeClient: {e}")
-            raise
+            self.logger.warning("Unitree control service unavailable, but program will continue running. Actions will be skipped, but voice greeting will still work.")
+            # 不抛出异常，让程序继续运行
 
         # 初始化音频处理器
         try:
-            self.audio_handler = get_audio_handler()
+            self.audio_handler = AudioHandler()
             if self.audio_handler:
                 self.logger.info("AudioHandler initialized for speech output")
             else:
@@ -229,132 +231,56 @@ class GreetingHandler(FaceResultHandler):
         Thread(target=self._handle_greeting, args=(name,), daemon=True).start()
 
         return True
-    
-    def _handle_greeting(self, name: str):
-        """
-        内部方法：执行具体的问候逻辑
 
-        Args:
-            name: 检测到的人名
-        """
+    def _handle_greeting(self, name: str):
         self.logger.info(f"[DEBUG] Starting greeting sequence for {name}")
 
-        # 执行打招呼
         with self.state_lock:
             self.robot_state = "GREETING"
-            self.logger.info(f"[DEBUG] Robot state set to GREETING")
 
-        # 创建线程同时执行语音和动作
-        import threading
-
-        def play_audio():
-            self.logger.info(f"[DEBUG] Starting audio thread for {name}")
-            self._say_hello(name)
-            self.logger.info(f"[DEBUG] Audio thread for {name} completed")
-
-        def play_motion():
-            self.logger.info(f"[DEBUG] Starting motion thread for {name}")
-            try:
-                # 直接执行挥手动作
-                self.logger.info(f"Executing wave_hand action for {name}")
-                self.unitree_client.shake_hand()
-                # 等待动作完成
-                import time
-                time.sleep(10.0)  # 等待握手动作完成
-                # 回到站立状态
-                self.unitree_client.high_stand()
-                self.logger.info(f"[DEBUG] Wave hand action completed successfully for {name}")
-            except Exception as e:
-                self.logger.error(f"Failed to execute motion command: {e}")
-                import traceback
-                self.logger.error(f"Motion command error details: {traceback.format_exc()}")
-
-        # 并发执行语音和动作
-        audio_thread = threading.Thread(target=play_audio)
-        motion_thread = threading.Thread(target=play_motion)
-
-        self.logger.info(f"[DEBUG] Starting audio and motion threads for {name}")
-        audio_thread.start()
-        motion_thread.start()
-
-        # 等待两个线程完成
-        self.logger.info(f"[DEBUG] Waiting for audio and motion threads to complete for {name}")
-        audio_thread.join()
-        motion_thread.join()
-        self.logger.info(f"[DEBUG] Audio and motion threads completed for {name}")
-
-        with self.state_lock:
-            self.robot_state = "IDLE"
-            self.logger.info(f"[DEBUG] Robot state reset to IDLE")
-
-        self.logger.info(
-            f"Greeting finished: {name}"
-        )
-
-    def _say_hello(self, name: str):
-        """
-        内部方法：播放问候语音
-
-        Args:
-            name: 检测到的人名
-        """
-        self.logger.info(f"[DEBUG] Starting audio greeting for {name}")
-
-        # 播放问候语音
         try:
-            greeting_text = f"Hello {name}! Nice to meet you!"
-            self.logger.info(f"Playing greeting: {greeting_text}")
-
-            self.logger.info(f"[DEBUG] Setting LED to green")
-            # 使用UnitreeClient控制LED
-            self.unitree_client.led_control(0, 255, 0)  # 设置LED为绿色
-
-            # 尝试使用新的音频处理器播放语音
+            # 使用外接扬声器播放问候语
+            greeting_text = f"Hello {name}!"
             if self.audio_handler:
-                self.logger.info(f"[DEBUG] Using new audio handler for speech")
-                success = self.audio_handler.speak_text(greeting_text, blocking=True)
-                if success:
-                    self.logger.info("New audio handler speech playback successful")
+                self.logger.info(f"Playing greeting via external speaker: {greeting_text}")
+                success = self.audio_handler.play_with_external_speaker(greeting_text)
+                if not success:
+                    self.logger.warning("Failed to play via external speaker, falling back to robot's built-in speaker")
+                    
+                if self.unitree_client:
+                    try:
+                        self.unitree_client.do_behavior(
+                            "greet",
+                            person_name=name
+                        )
+                    except Exception as client_error:
+                        self.logger.error(f"UnitreeClient greeting failed: {client_error}")
+                        self.logger.info("Voice greeting only (no action due to UnitreeClient failure)")
                 else:
-                    self.logger.warning("New audio handler speech playback failed, falling back to Unitree TTS")
-                    # 如果新音频处理器失败，回退到Unitree的TTS
-                    result = self.unitree_client.speak(greeting_text, 80)
+                    self.logger.info("UnitreeClient not available, greeting with voice only")
             else:
-                self.logger.info(f"[DEBUG] Audio handler not available, using Unitree TTS")
-                # 使用UnitreeClient播放TTS
-                result = self.unitree_client.speak(greeting_text, 80)  # 播放问候语，音量80%
-
-                # 检查TTS是否成功
-                if result and result.get("status") == "success":
-                    self.logger.info("TTS playback initiated successfully")
+                self.logger.warning("AudioHandler not available, using robot's built-in speaker")
+                # 如果音频处理器不可用，使用机器人内置扬声器（仅当UnitreeClient可用时）
+                if self.unitree_client:
+                    try:
+                        self.unitree_client.do_behavior(
+                            "greet",
+                            person_name=name
+                        )
+                    except Exception as client_error:
+                        self.logger.error(f"UnitreeClient greeting failed: {client_error}")
+                        self.logger.info("No greeting available (both AudioHandler and UnitreeClient failed)")
                 else:
-                    self.logger.warning("TTS playback initiation failed")
+                    self.logger.info("UnitreeClient not available, greeting with voice only")
 
-            # 等待语音播放完成，根据语音长度动态调整等待时间 估算语音长度（每个词约0.5秒）
-            word_count = len(greeting_text.split())
-            estimated_duration = max(3.0, word_count * 0.5)  # 至少等待3秒
-            self.logger.info(f"[DEBUG] Estimated audio duration: {estimated_duration}s, sleeping...")
-            time.sleep(estimated_duration)
-            self.logger.info(f"[DEBUG] Audio playback sleep completed")
         except Exception as e:
-            self.logger.error(f"Failed to play audio greeting: {e}")
-            import traceback
-            self.logger.error(f"Detailed error: {traceback.format_exc()}")
+            self.logger.error(f"Greeting failed: {e}")
+
         finally:
-            # 确保LED最终被关闭
-            try:
-                self.logger.info(f"[DEBUG] Turning off LED")
-                # 使用UnitreeClient关闭LED
-                self.unitree_client.led_control(0, 0, 0)  # 关闭LED
-                self.logger.info(f"[DEBUG] LED turned off successfully")
-            except Exception as e:
-                self.logger.error(f"Failed to turn off LED: {e}")
+            with self.state_lock:
+                self.robot_state = "IDLE"
 
-        # 同时输出日志
-        text = f"Hello {name}"
-        self.logger.info(text)
-
-        self.logger.info(f"[DEBUG] Audio greeting for {name} completed")
+        self.logger.info(f"Greeting finished: {name}")
 
 
 class WeChatWorkApiRequestHandler(FaceResultHandler):

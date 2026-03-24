@@ -32,3 +32,4 @@ Thumbs.db
 # --- 其他常见忽略 ---
 *.bak
 *.tmp
+.qwen
