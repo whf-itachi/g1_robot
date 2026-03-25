@@ -1,10 +1,10 @@
 """
-总入口：
-接收外部指令 & 决定做什么动作
+manager.py
+总入口：接收外部指令 & 决定做什么动作
 """
 import logging
 from .executor import MotionExecutor
-from .sequences import GreetMotion
+from .sequences import GreetMotion, TestMotion
 
 # 获取logger实例
 logger = logging.getLogger(__name__)
@@ -43,7 +43,8 @@ class MotionManager:
         if name == "greet":
             person_name = params.get("person_name", "my friend")
             logger.info(f"Greeting {person_name}")
-            self.executor.execute(GreetMotion(person_name))
+            self.executor.execute(TestMotion())  # 测试用，看看是否能够执行
+            # self.executor.execute(GreetMotion(person_name))
 
         else:
             logger.warning(f"Unknown behavior: {name}")

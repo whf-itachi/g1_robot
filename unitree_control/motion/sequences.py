@@ -74,3 +74,8 @@ class GreetMotion(MotionBase):
             if ratio >= 1.0:
                 ctx.led(0, 0, 0)
                 self.finished = True
+
+
+class TestMotion(MotionBase):
+    def update(self, ctx, dt):
+        ctx.set_joint(25, -1.0)

@@ -1,6 +1,6 @@
 """
-调度器：
-控制动作的生命周期
+executor.py
+调度器：控制动作的生命周期
 """
 import time
 
@@ -30,7 +30,6 @@ class MotionExecutor:
         self.primitives.stop()
 
     def update(self):
-        """主循环（每帧执行）"""
         now = time.time()
         dt = now - self.last_time
         self.last_time = now
@@ -44,6 +43,9 @@ class MotionExecutor:
             motion.start(self.primitives)
 
         motion.update(self.primitives, dt)
+
+        # 每帧下发
+        self.primitives.apply()
 
         if motion.finished:
             self.current_motion = None
