@@ -2,8 +2,12 @@
 总入口：
 接收外部指令 & 决定做什么动作
 """
+import logging
 from .executor import MotionExecutor
 from .sequences import GreetMotion
+
+# 获取logger实例
+logger = logging.getLogger(__name__)
 
 
 class MotionManager:
@@ -34,14 +38,15 @@ class MotionManager:
         self.executor.update()
 
     def handle_behavior(self, name, params):
-        print(f"🎬 Behavior: {name}")
+        logger.info(f"Behavior: {name}")
 
         if name == "greet":
             person_name = params.get("person_name", "my friend")
+            logger.info(f"Greeting {person_name}")
             self.executor.execute(GreetMotion(person_name))
 
         else:
-            print(f"⚠️ Unknown behavior: {name}")
+            logger.warning(f"Unknown behavior: {name}")
 
     def handle_control(self, cmd):
         vx = cmd.get("vx", 0.0)

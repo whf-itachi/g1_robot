@@ -5,11 +5,11 @@ import json
 import struct
 import threading
 import queue
-import traceback
 import time
 
 from unitree_control.driver.unitree_driver import UnitreeDriver
 from unitree_control.motion.manager import MotionManager
+from unitree_control.logger_config import logger as main_logger
 
 
 class UnitreeControlServer:
@@ -18,7 +18,7 @@ class UnitreeControlServer:
         self.host = host
         self.port = port
 
-        print("🚀 Initializing Unitree Control Server...")
+        main_logger.info("Initializing Unitree Control Server...")
 
         # ==========================
         # Driver + Motion System
@@ -64,7 +64,7 @@ class UnitreeControlServer:
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(5)
 
-        print(f"✅ Server listening on {self.host}:{self.port}")
+        main_logger.info(f"Server listening on {self.host}:{self.port}")
 
     # =========================================================
     # Command Handling
@@ -108,14 +108,14 @@ class UnitreeControlServer:
             return {"status": "success"}
 
         except Exception as e:
-            print(f"❌ Command error: {e}")
+            main_logger.error(f"Command error: {e}", exc_info=True)
             return {"status": "error", "message": str(e)}
 
     # =========================================================
     # Workers
     # =========================================================
     def action_worker(self):
-        print("🧠 Action worker started")
+        main_logger.info("Action worker started")
 
         while self.running:
             try:
@@ -124,14 +124,15 @@ class UnitreeControlServer:
                     continue
 
                 try:
-                    # 👉 统一入口
+                    # 统一入口
+                    main_logger.debug(f"Handling behavior: {cmd.get('name')} with params: {cmd.get('params', {})}")
                     self.motion_manager.handle_behavior(
                         cmd.get("name"),
                         cmd.get("params", {})
                     )
+                    main_logger.info(f"Behavior '{cmd.get('name')}' completed successfully")
                 except Exception as e:
-                    print(f"❌ Motion error: {e}")
-                    print(traceback.format_exc())
+                    main_logger.error(f"Motion error: {e}", exc_info=True)
 
                 self.action_queue.task_done()
 
@@ -139,7 +140,7 @@ class UnitreeControlServer:
                 continue
 
     def speech_worker(self):
-        print("🔊 Speech worker started")
+        main_logger.info("🔊 Speech worker started")
 
         while self.running:
             try:
@@ -150,6 +151,7 @@ class UnitreeControlServer:
                 text = cmd.get("text", "")
                 volume = cmd.get("volume", 80)
 
+                main_logger.info(f"Speaking: '{text[:50]}{'...' if len(text) > 50 else ''}' at volume {volume}")
                 self.driver.speak(text, volume)
 
                 self.speech_queue.task_done()
@@ -162,7 +164,7 @@ class UnitreeControlServer:
         核心循环（非阻塞）
         负责推进 MotionExecutor
         """
-        print("⚙️ Motion loop started (50Hz)")
+        main_logger.info("⚙️ Motion loop started (50Hz)")
 
         while self.running:
             try:
@@ -170,14 +172,13 @@ class UnitreeControlServer:
                 time.sleep(0.02)  # 50Hz
 
             except Exception as e:
-                print(f"❌ Motion loop error: {e}")
-                print(traceback.format_exc())
+                main_logger.error(f"Motion loop error: {e}", exc_info=True)
 
     # =========================================================
     # Socket Handling
     # =========================================================
     def handle_client(self, conn, addr):
-        print(f"🔗 Connected: {addr}")
+        main_logger.info(f"Connected: {addr}")
 
         try:
             while True:
@@ -200,7 +201,9 @@ class UnitreeControlServer:
                     break
 
                 # ===== 处理命令 =====
+                main_logger.debug(f"Received command from {addr}: {cmd_data.decode('utf-8')[:100]}...")
                 response = self.handle_command(cmd_data.decode('utf-8'))
+                main_logger.debug(f"Sending response to {addr}: {response}")
 
                 # ===== 返回响应 =====
                 response_bytes = json.dumps(response).encode('utf-8')
@@ -209,11 +212,10 @@ class UnitreeControlServer:
                 conn.sendall(response_bytes)
 
         except ConnectionResetError:
-            print(f"⚠️ Client disconnected unexpectedly: {addr}")
+            main_logger.warning(f"Client disconnected unexpectedly: {addr}")
 
         except Exception as e:
-            print(f"❌ Client error: {e}")
-            print(traceback.format_exc())
+            main_logger.error(f"Client error: {e}", exc_info=True)
 
         finally:
             try:
@@ -221,52 +223,53 @@ class UnitreeControlServer:
             except:
                 pass
 
-            print(f"🔌 Connection closed: {addr}")
+            main_logger.info(f"Connection closed: {addr}")
 
     # =========================================================
     # Main Loop
     # =========================================================
     def start(self):
-        print("🚀 Unitree Control Server started")
+        main_logger.info("Unitree Control Server started")
 
         try:
             while True:
                 conn, addr = self.server_socket.accept()
 
-                threading.Thread(
+                main_logger.debug(f"Accepting connection from {addr}")
+                client_thread = threading.Thread(
                     target=self.handle_client,
                     args=(conn, addr),
                     daemon=True
-                ).start()
+                )
+                client_thread.start()
 
         except KeyboardInterrupt:
-            print("\n🛑 KeyboardInterrupt received")
+            main_logger.info("\n KeyboardInterrupt received")
             self.shutdown()
 
         except Exception as e:
-            print(f"❌ Server fatal error: {e}")
-            print(traceback.format_exc())
+            main_logger.error(f"Server fatal error: {e}", exc_info=True)
             self.shutdown()
 
     # =========================================================
     # Shutdown
     # =========================================================
     def shutdown(self):
-        print("🛑 Shutting down server...")
+        main_logger.info("Shutting down server...")
         self.running = False
 
         try:
             self.action_queue.put(None)
             self.speech_queue.put(None)
-        except:
-            pass
+        except Exception as e:
+            main_logger.error(f"Error putting None to queues: {e}")
 
         try:
             self.server_socket.close()
-        except:
-            pass
+        except Exception as e:
+            main_logger.error(f"Error closing server socket: {e}")
 
-        print("✅ Server stopped")
+        main_logger.info("Server stopped")
 
 
 # =========================================================

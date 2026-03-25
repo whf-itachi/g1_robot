@@ -39,3 +39,11 @@ handle_command
    MotionExecutor
         ↓
       SDK
+
+# 日志系统
+本服务包含完整的日志记录功能：
+- 日志文件保存在 `unitree_control/logs/` 目录下
+- 主日志文件名为 `unitree_control.log`
+- 支持日志轮转：单个文件最大5MB，最多保留5个历史文件
+- 日志级别包括 DEBUG, INFO, WARNING, ERROR, CRITICAL
+- 同时输出到控制台和文件，便于实时监控和长期分析

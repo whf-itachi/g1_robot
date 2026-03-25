@@ -1,4 +1,5 @@
 import threading
+import logging
 
 from unitree_sdk2py.core.channel import (
     ChannelFactoryInitialize,
@@ -14,11 +15,14 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 
 from unitree_sdk2py.utils.crc import CRC
 
+# 获取logger实例
+logger = logging.getLogger(__name__)
+
 
 class UnitreeDriver:
 
     def __init__(self):
-        print("Initializing Unitree SDK...")
+        logger.info("Initializing Unitree SDK...")
 
         ChannelFactoryInitialize(0, "eth0")
 
@@ -59,7 +63,7 @@ class UnitreeDriver:
         # 设置关节默认控制参数（非常重要❗）
         self._init_motors()
 
-        print("✅ UnitreeDriver initialized")
+        logger.info("✅ UnitreeDriver initialized")
 
     # ==================================================
     # ✅ 低层控制核心

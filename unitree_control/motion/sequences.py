@@ -3,6 +3,7 @@
 把多个动作拼起来
 """
 import math
+import logging
 from .base import MotionBase
 from .primitives import (
     R_SHOULDER_PITCH,
@@ -10,6 +11,9 @@ from .primitives import (
     R_ELBOW,
     R_WRIST_PITCH
 )
+
+# 获取logger实例
+logger = logging.getLogger(__name__)
 
 
 class GreetMotion(MotionBase):
@@ -24,7 +28,8 @@ class GreetMotion(MotionBase):
         ctx.led(0, 255, 0)
 
     def update(self, ctx, dt):
-        print("greet motion update ...")
+        # 记录问候动作更新状态（仅在调试模式下）
+        logger.debug("greet motion update ...")
         self.timer += dt
 
         # ===== 阶段0：抬手 =====
