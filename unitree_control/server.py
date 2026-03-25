@@ -140,7 +140,7 @@ class UnitreeControlServer:
                 continue
 
     def speech_worker(self):
-        main_logger.info("🔊 Speech worker started")
+        main_logger.info("Speech worker started")
 
         while self.running:
             try:
@@ -164,7 +164,7 @@ class UnitreeControlServer:
         核心循环（非阻塞）
         负责推进 MotionExecutor
         """
-        main_logger.info("⚙️ Motion loop started (50Hz)")
+        main_logger.info("Motion loop started (50Hz)")
 
         while self.running:
             try:

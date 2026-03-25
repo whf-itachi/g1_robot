@@ -38,7 +38,7 @@ class UnitreeDriver:
         self.audio.SetVolume(80)
 
         # ==================================================
-        # ✅ 新增：低层控制（关键）
+        # 低层控制（关键）
         # ==================================================
 
         self.low_cmd = unitree_hg_msg_dds__LowCmd_()
@@ -63,10 +63,10 @@ class UnitreeDriver:
         # 设置关节默认控制参数（非常重要❗）
         self._init_motors()
 
-        logger.info("✅ UnitreeDriver initialized")
+        logger.info("UnitreeDriver initialized")
 
     # ==================================================
-    # ✅ 低层控制核心
+    # 低层控制核心
     # ==================================================
 
     def _init_motors(self):
@@ -120,7 +120,7 @@ class UnitreeDriver:
         self.audio.LedControl(r, g, b)
 
     # ==================================================
-    # ✅ 关节控制（你需要的）
+    # 关节控制
     # ==================================================
 
     def set_joint(self, joint_id, q):
