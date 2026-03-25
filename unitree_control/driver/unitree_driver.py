@@ -13,6 +13,7 @@ from unitree_sdk2py.core.channel import (
     ChannelSubscriber,
 )
 
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
 
@@ -122,25 +123,26 @@ class UnitreeDriver:
 
         while self.running:
 
-            # 等待 low_state
             if self.low_state is None:
                 time.sleep(self.control_dt)
                 continue
 
-            # ================== 第一次：对齐当前姿态 ==================
+            # 初始化
             if not self.initialized:
-                logger.info("Initializing joint positions...")
-
                 for i in range(len(self.low_cmd.motor_cmd)):
                     self.low_cmd.motor_cmd[i].q = self.low_state.motor_state[i].q
-
-                self.low_cmd.mode_machine = self.low_state.mode_machine
                 self.initialized = True
 
-                logger.info("Joint initialization done")
-
-            # ================== 每次循环 ==================
+            # ===== 每一帧必须完整写 =====
             self.low_cmd.mode_machine = self.low_state.mode_machine
+            self.low_cmd.mode_pr = 0  # Mode.PR
+
+            for i in range(len(self.low_cmd.motor_cmd)):
+                self.low_cmd.motor_cmd[i].mode = 1
+                self.low_cmd.motor_cmd[i].dq = 0.0
+                self.low_cmd.motor_cmd[i].kp = Kp[i]
+                self.low_cmd.motor_cmd[i].kd = Kd[i]
+                self.low_cmd.motor_cmd[i].tau = 0.0
 
             # 发送
             self.low_cmd.crc = self.crc.Crc(self.low_cmd)
