@@ -22,7 +22,6 @@ from threading import Thread, Lock
 
 from common.unitree_client import UnitreeClient
 from common.audio_handler import AudioHandler
-
 # 导入日志配置
 from common.logger_config import get_logger
 
@@ -38,10 +37,7 @@ except ImportError:
 import json
 import uuid
 import ssl
-from datetime import datetime, timezone
 import pytz
-from cv_bridge import CvBridge
-import cv2
 
 
 class FaceResultHandler(ABC):
@@ -171,7 +167,7 @@ class GreetingHandler(FaceResultHandler):
         # 当前机器人状态
         self.robot_state = "IDLE"
         # 去重时间阈值（秒）
-        self.dedup_interval = 15.0
+        self.dedup_interval = 5.0
 
         # 添加锁来保护共享资源
         self.state_lock = Lock()  # 保护self.robot_state变量避免多个地方修改
@@ -213,7 +209,7 @@ class GreetingHandler(FaceResultHandler):
             else:  # 相似度小于0.6，询问模式
                 greeting_text = f"Hi, are you {name}? You look quite different lately!"
         else:  # 如果没有人脸或名字为空，欢迎模式
-            greeting_text = "Hello, welcome!"
+            greeting_text = "Hello, welcome to Haitch!"
 
         # 使用 ROS2 时钟进行去重检查（仅针对有名字的情况，避免每次无人脸都触发欢迎）
         if name and name.strip():
@@ -236,7 +232,7 @@ class GreetingHandler(FaceResultHandler):
                 if anonymous_key in self.last_seen:
                     time_since_last = now - self.last_seen[anonymous_key]
                     self.logger.info(f"[DEBUG] Last seen anonymous visitor {time_since_last}s ago, threshold is {self.dedup_interval}s")
-                    if time_since_last < self.dedup_interval:
+                    if time_since_last < 3:
                         self.logger.info(f"[DEBUG] Deduplication active, ignoring anonymous visitor")
                         return True
                 self.last_seen[anonymous_key] = now
@@ -259,48 +255,30 @@ class GreetingHandler(FaceResultHandler):
             self.robot_state = "GREETING"
 
         try:
+            if self.unitree_client:
+                try:
+                    # 根据是否有名字决定行为参数
+                    if name and name.strip():
+                        self.unitree_client.do_behavior(
+                            "greet",
+                            person_name=name
+                        )
+                except Exception as client_error:
+                    self.logger.error(f"UnitreeClient greeting failed: {client_error}")
+                    self.logger.info("Voice greeting only (no action due to UnitreeClient failure)")
+            else:
+                self.logger.info("UnitreeClient not available, greeting with voice only")
+
             # 使用外接扬声器播放问候语
             if self.audio_handler:
                 self.logger.info(f"Playing greeting via external speaker: {greeting_text}")
                 success = self.audio_handler.play_with_external_speaker(greeting_text)
                 if not success:
                     self.logger.warning("Failed to play via external speaker, falling back to robot's built-in speaker")
-
-                if self.unitree_client:
-                    try:
-                        # 根据是否有名字决定行为参数
-                        if name and name.strip():
-                            self.unitree_client.do_behavior(
-                                "greet",
-                                person_name=name
-                            )
-                    except Exception as client_error:
-                        self.logger.error(f"UnitreeClient greeting failed: {client_error}")
-                        self.logger.info("Voice greeting only (no action due to UnitreeClient failure)")
                 else:
-                    self.logger.info("UnitreeClient not available, greeting with voice only")
+                    self.logger.info("play_with_external_speaker is error!")
             else:
-                self.logger.warning("AudioHandler not available, using robot's built-in speaker")
-                # 如果音频处理器不可用，使用机器人内置扬声器（仅当UnitreeClient可用时）
-                if self.unitree_client:
-                    try:
-                        # 根据是否有名字决定行为参数
-                        if name and name.strip():
-                            self.unitree_client.do_behavior(
-                                "greet",
-                                person_name=name
-                            )
-                        else:
-                            # 对于无名访问者，不传递person_name
-                            self.unitree_client.do_behavior(
-                                "greet"
-                            )
-                    except Exception as client_error:
-                        self.logger.error(f"UnitreeClient greeting failed: {client_error}")
-                        self.logger.info("No greeting available (both AudioHandler and UnitreeClient failed)")
-                else:
-                    self.logger.info("UnitreeClient not available, greeting with voice only")
-
+                self.logger.info("audio_handler not available!")
         except Exception as e:
             self.logger.error(f"Greeting failed: {e}")
 
@@ -309,11 +287,6 @@ class GreetingHandler(FaceResultHandler):
                 self.robot_state = "IDLE"
 
         self.logger.info(f"Greeting finished: {name} with text: {greeting_text}")
-
-    def _handle_greeting(self, name: str):
-        # 为了向后兼容，保留原始方法，使用默认问候语
-        greeting_text = f"Hello {name}!" if name and name.strip() else "Hello, welcome!"
-        self._handle_greeting_with_text(name, greeting_text)
 
 
 class WeChatWorkApiRequestHandler(FaceResultHandler):
@@ -325,39 +298,22 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
     def __init__(self, node: Node):
         self.node = node
 
-        # 企业微信机器人配置
+        # 企业微信机器人配置 - 直接在代码中定义
         self.bot_id = "aibPK7lIHLBWw8DTawBKdyh1Q9cwXIqp29I"  # 请替换为实际的Bot ID
         self.secret = "DraM3GAPGWuGCeX50pDkasYXtnFiPsaIrjyNAh82xn7"  # 请替换为实际的Secret
-        self.target_user = "LiHuo"  # 请替换为实际的目标用户ID
+        # self.target_users = ["maik", "LiHuo", "Na"]  # 目标用户列表，支持多个用户
+        self.target_users = ["ZhouYangYang", "LiHuo", "Nathan"]  # 目标用户列表，支持多个用户
+
         self.ws_url = "wss://openws.work.weixin.qq.com"
 
-        # Lsky Pro 图床配置
-        self.lsky_base_url = "http://tiagent.tech:7791/api/v1"  # 使用域名
-        self.lsky_email = "Nathan@Haitch.cn"  # Nathan账号
-        self.lsky_password = "12345678"  # Nathan密码
-        self.lsky_strategy_id = 1  # 强制使用策略ID 1
-
-        # 图片压缩参数
-        self.image_quality = 30  # 图片压缩质量（1-100）
-        self.max_image_size = 480  # 图片最大边长（像素）
-
         # 人脸识别去重机制 - 记录每个人脸最后发送时间
-        self.duplicate_interval = 180  # 3分钟（秒）
+        self.duplicate_interval = 300  # 5分钟
 
         # 检查必要的库是否可用
         self.websocket_available = WEBSOCKET_AVAILABLE
-        try:
-            import requests
-            self.requests_available = True
-        except ImportError:
-            self.requests_available = False
-            # 为WeChatWorkApiRequestHandler创建专用日志记录器
-            self.logger = get_logger(f"{self.node.get_name()}.{self.__class__.__name__}")
-            self.logger.error("requests库未安装，请运行: pip install requests")
+        self.logger = get_logger(f"{self.node.get_name()}.{self.__class__.__name__}")
 
         if not self.websocket_available:
-            if not hasattr(self, 'logger'):
-                self.logger = get_logger(f"{self.node.get_name()}.{self.__class__.__name__}")
             self.logger.error("websocket库未安装，请运行: pip install websocket-client")
 
         # WebSocket连接相关
@@ -376,27 +332,14 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         # 人脸识别去重机制 - 记录每个人脸最后发送时间
         self.face_last_sent = {}
 
-        # 缓存最新图像
-        self.latest_image = None
-        self.image_lock = threading.Lock()
-
         # 重要提醒
         self.logger.warn("重要提醒：企业微信机器人必须先由目标用户主动发起对话，之后机器人才能主动发送消息给该用户！")
-        self.logger.info(f"配置的机器人ID: {self.bot_id}, 目标用户: {self.target_user}")
+        self.logger.info(f"配置的机器人ID: {self.bot_id}, 目标用户: {self.target_users}")
 
         # 尝试初始化连接
         if self.websocket_available:
             self._initialize_connection()
     
-    def update_latest_image(self, image_msg):
-        """
-        更新最新图像缓存
-        
-        Args:
-            image_msg: sensor_msgs/Image 消息
-        """
-        with self.image_lock:
-            self.latest_image = image_msg
 
     def _initialize_connection(self):
         """初始化WebSocket连接"""
@@ -482,7 +425,7 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         try:
             self.logger.info(f"[RECV] 原始消息: {message[:200]}...")  # 只显示前200个字符避免日志过长
             data = json.loads(message)
-            self.logger.info(f"[RECV] 解析后CMD: {data.get('cmd', 'unknown')}")
+            self.logger.info(f"[RECV] 解析后data: {data}")
 
             cmd = data.get("cmd", "")
             errcode = data.get("errcode", 0)
@@ -619,6 +562,9 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             self.logger.info(f"当前连接状态: {is_connected}, 认证状态: {is_authenticated}")
             return False
 
+        if not face_result.name:  # 陌生人不发生信息
+            return False
+
         # 检查是否在去重时间内
         current_time = self.node.get_clock().now().nanoseconds / 1e9
         person_key = face_result.name
@@ -637,22 +583,18 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             self.face_last_sent[person_key] = current_time
 
         try:
-            # 将时间转换为北京时间
-            beijing_tz = pytz.timezone('Asia/Shanghai')
-            current_time_dt = datetime.fromtimestamp(current_time, tz=timezone.utc)
-            beijing_time = current_time_dt.astimezone(beijing_tz)
-            formatted_time = beijing_time.strftime('%Y-%m-%d %H:%M:%S')
-
             # 构建要发送的消息内容
-            message_content = f"人脸识别通知：\n\n**姓名**：{face_result.name}\n**相似度**：{face_result.similarity:.2f}\n**时间**：{formatted_time}"
+            message_content = f"Face Recognition Notification: \n\n**Name**：{face_result.name}\n**Similarity Score**：{face_result.similarity:.2f}"
 
-            self.logger.info(f"准备发送人脸识别信息到企业微信: {message_content}")
-
-            # 发送企业微信消息（包含文本和图片）
-            success = self._send_wechat_work_message(message_content)
+            # 使用传入的图像URL，不再从缓存获取
+            image_url = face_result.image_url if face_result.image_url else None
+            self.logger.info(f"获取到人脸图片URL: {image_url}")
+            
+            # 发送企业微信消息（包含文本和图片URL）
+            success = self._send_wechat_work_message_with_url(message_content, image_url)
 
             if success:
-                self.logger.info("企业微信消息（含图片）发送成功")
+                self.logger.info("企业微信消息（含图片URL）发送成功")
             else:
                 self.logger.error("企业微信消息发送失败")
 
@@ -664,150 +606,10 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             self.logger.error(f"错误详情: {traceback.format_exc()}")
             return False
 
-    def _get_lsky_token(self):
-        """
-        通过Nathan账号获取Lsky Pro的Token
-        """
-        if not self.requests_available:
-            self.logger.error("requests库不可用，无法获取Token")
-            return None
-
-        try:
-            import requests
-
-            url = f"{self.lsky_base_url}/tokens"
-            data = {
-                "email": self.lsky_email,
-                "password": self.lsky_password
-            }
-            headers = {
-                "Accept": "application/json",
-                "Content-Type": "application/json"
-            }
-
-            self.logger.info(f"[上传] 正在使用Nathan账号登录获取Token...")
-            response = requests.post(url, json=data, headers=headers, timeout=30)
-            result = response.json()
-
-            if result.get("status") and result.get("data", {}).get("token"):
-                token = result["data"]["token"]
-                self.logger.info(f"[上传] 登录成功! Token: {token[:20]}...")
-                return token
-            else:
-                message = result.get("message", "未知错误")
-                self.logger.error(f"[上传] 登录失败: {message}")
-                return None
-
-        except Exception as e:
-            self.logger.error(f"[上传] 获取Token异常: {e}")
-            import traceback
-            self.logger.error(f"[上传] 详细错误: {traceback.format_exc()}")
-            return None
-
-    def _upload_image_to_cloud(self, image_msg):
-        """
-        使用Nathan账号上传图像到云端图床并返回URL
-        """
-        if not self.requests_available:
-            self.logger.error("requests库不可用，无法上传图片到云端")
-            return None
-
-        try:
-            import requests
-            import tempfile
-            import os
-
-            # 获取Token
-            token = self._get_lsky_token()
-            if not token:
-                self.logger.error("[上传] 无法获取Token，上传失败")
-                return None
-
-            # 将图像消息转换为OpenCV格式
-            bridge = CvBridge()
-            cv_image = bridge.imgmsg_to_cv2(image_msg, "bgr8")
-
-            # 压缩图像
-            height, width = cv_image.shape[:2]
-            max_size = self.max_image_size
-
-            if max(height, width) > max_size:
-                if height > width:
-                    new_height = max_size
-                    new_width = int(width * max_size / height)
-                else:
-                    new_width = max_size
-                    new_height = int(height * max_size / width)
-
-                cv_image = cv2.resize(cv_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
-
-            # 保存到临时文件
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-                success, encoded_image = cv2.imencode(
-                    '.jpg',
-                    cv_image,
-                    [cv2.IMWRITE_JPEG_QUALITY, self.image_quality]
-                )
-
-                if not success:
-                    self.logger.error("图像编码失败")
-                    return None
-
-                encoded_image.tobytes()  # 获取字节数据
-                tmp_file.write(encoded_image.tobytes())
-                temp_image_path = tmp_file.name
-
-            try:
-                # 上传到Lsky Pro图床（使用Token认证）
-                headers = {
-                    "Authorization": f"Bearer {token}",
-                    "Accept": "application/json"
-                }
-
-                with open(temp_image_path, 'rb') as f:
-                    files = {'file': f}
-                    # Nathan账号需要强制指定strategy_id
-                    data = {'strategy_id': self.lsky_strategy_id} if self.lsky_strategy_id else {}
-
-                    response = requests.post(
-                        f"{self.lsky_base_url}/upload",
-                        files=files,
-                        data=data,
-                        headers=headers,
-                        timeout=60
-                    )
-
-                result = response.json()
-
-                if result.get("status") and result.get("data", {}).get("links", {}).get("url"):
-                    image_url = result["data"]["links"]["url"]
-                    self.logger.info(f"[上传] 图片上传成功: {image_url}")
-                    return image_url
-                else:
-                    message = result.get("message", "未知错误")
-                    self.logger.error(f"[上传] 图片上传失败: {message}")
-                    return None
-
-            except Exception as e:
-                self.logger.error(f"[上传] 上传异常: {e}")
-                import traceback
-                self.logger.error(f"[上传] 详细错误: {traceback.format_exc()}")
-                return None
-
-            finally:
-                # 清理临时文件
-                if os.path.exists(temp_image_path):
-                    os.remove(temp_image_path)
-
-        except Exception as e:
-            self.logger.error(f"[上传] 处理图像时出错: {e}")
-            import traceback
-            self.logger.error(f"[上传] 详细错误: {traceback.format_exc()}")
-            return None
 
     def _send_wechat_work_message_with_url(self, content: str, image_url: str = None) -> bool:
         """
-        通过企业微信发送消息（使用URL形式的图片）
+        通过企业微信发送消息（使用已有的图片URL）
         """
         with self.queue_lock:
             if not self.is_connected or not self.is_authenticated:
@@ -821,81 +623,35 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
             else:
                 full_content = content
 
-            # 发送Markdown消息（包含图片URL）
-            req_id = str(uuid.uuid4())
-            msg = {
-                "cmd": "aibot_send_msg",
-                "headers": {"req_id": req_id},
-                "body": {
-                    "chatid": self.target_user,
-                    "chat_type": 1,
-                    "msgtype": "markdown",
-                    "markdown": {"content": full_content}
+            # 向所有配置的目标用户发送消息
+            success_count = 0
+            for target_user in self.target_users:
+
+                # 发送Markdown消息（包含图片URL）
+                req_id = str(uuid.uuid4())
+                msg = {
+                    "cmd": "aibot_send_msg",
+                    "headers": {"req_id": req_id},
+                    "body": {
+                        "chatid": target_user,
+                        "chat_type": 1,
+                        "msgtype": "markdown",
+                        "markdown": {"content": full_content}
+                    }
                 }
-            }
 
-            self.ws_app.send(json.dumps(msg, ensure_ascii=False))
-            self.logger.info(f"[发送] Markdown消息 (req_id: {req_id})")
-            if image_url:
-                self.logger.info(f"[发送] 图片URL: {image_url}")
+                self.ws_app.send(json.dumps(msg, ensure_ascii=False))
+                self.logger.info(f"[发送] Markdown消息给 {target_user} (req_id: {req_id})")
+                if image_url:
+                    self.logger.info(f"[发送] 图片URL: {image_url}")
+                
+                success_count += 1
 
-            return True
+            self.logger.info(f"成功向 {success_count} 个用户发送了消息")
+            return success_count > 0
 
         except Exception as e:
             self.logger.error(f"发送企业微信消息出错: {e}")
             import traceback
             self.logger.error(f"详细错误信息: {traceback.format_exc()}")
             return False
-
-    def _send_wechat_work_message(self, content: str) -> bool:
-        """
-        发送企业微信消息（先上传图片到云端，再发送包含URL的消息）
-        """
-        with self.queue_lock:
-            if not self.is_connected or not self.is_authenticated:
-                self.logger.error("WebSocket未连接或未认证")
-                return False
-
-        try:
-            # 异步上传图片并发送消息
-            import threading
-            upload_and_send_thread = threading.Thread(
-                target=self._upload_and_send_in_thread,
-                args=(content,),
-                daemon=True
-            )
-            upload_and_send_thread.start()
-
-            return True  # 操作启动成功
-
-        except Exception as e:
-            self.logger.error(f"启动上传和发送线程出错: {e}")
-            import traceback
-            self.logger.error(f"详细错误信息: {traceback.format_exc()}")
-            return False
-
-    def _upload_and_send_in_thread(self, content: str):
-        """
-        在独立线程中上传图片并发送消息
-        """
-        try:
-            # 上传图片到云端
-            image_url = None
-            with self.image_lock:
-                if self.latest_image:
-                    image_url = self._upload_image_to_cloud(self.latest_image)
-
-            # 发送消息（包含图片URL）
-            success = self._send_wechat_work_message_with_url(content, image_url)
-            
-            if success:
-                self.logger.info("企业微信消息（含云端图片URL）发送成功")
-            else:
-                self.logger.error("企业微信消息发送失败")
-
-        except Exception as e:
-            self.logger.error(f"上传和发送过程中出错: {e}")
-            import traceback
-            self.logger.error(f"详细错误信息: {traceback.format_exc()}")
-    
-    

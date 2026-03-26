@@ -28,38 +28,21 @@ class FaceBehaviorNode(Node):
         self.processor.register_handler("greeting", greeting_handler)
 
         # 注册企业微信API请求处理器
-        # wechat_api_handler = WeChatWorkApiRequestHandler(self)
-        # self.processor.register_handler("wechat_api_request", wechat_api_handler)
+        wechat_api_handler = WeChatWorkApiRequestHandler(self)
+        self.processor.register_handler("wechat_api_request", wechat_api_handler)
 
         try:
             self.face_sub = self.create_subscription(
                 FaceResult,
                 "/face/result",
                 self.face_callback,
-                10
+                5
             )
             self.logger.info("Face result subscriber created successfully")
 
-            # 订阅图像话题，用于获取人脸识别的图像 用于发送给企微
-            self.image_sub = self.create_subscription(
-                Image,
-                "/c920/image_raw",
-                self.image_callback,
-                10
-            )
-            self.logger.info("Image subscriber created successfully")
         except Exception as e:
             self.logger.error(f"Failed to create subscription: {e}")
             raise
-
-    def image_callback(self, msg):
-        """
-        图像回调函数，缓存最新图像
-        """
-        # 更新企业微信处理器中的图像缓存
-        wechat_handler = self.processor.get_handler("wechat_api_request")
-        if wechat_handler:
-            wechat_handler.update_latest_image(msg)
 
     def face_callback(self, msg):
         """

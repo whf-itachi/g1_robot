@@ -17,6 +17,8 @@ from .face_database import FaceDatabase
 
 # 导入日志配置
 from common.logger_config import get_logger
+# 导入图像上传器
+from common.image_uploader import get_image_uploader
 
 
 class FaceNode(Node):
@@ -61,6 +63,14 @@ class FaceNode(Node):
             self.logger.error(f"Failed to load face database: {e}")
             raise
 
+        # 初始化图像上传器
+        try:
+            self.image_uploader = get_image_uploader()
+            self.logger.info("图像上传器初始化成功")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize image uploader: {e}")
+            raise
+
         try:
             self.sub = self.create_subscription(
                 Image,
@@ -69,7 +79,7 @@ class FaceNode(Node):
                 10
             )
 
-            self.pub = self.create_publisher(FaceResult, "/face/result", 10)
+            self.pub = self.create_publisher(FaceResult, "/face/result", 5)
             self.logger.info(f"人脸识别节点就绪，数据库大小: {len(self.db.data)}, processing every {self.process_every_n_frames} frames")
         except Exception as e:
             self.logger.error(f"Failed to create subscription/publisher: {e}")
@@ -89,14 +99,31 @@ class FaceNode(Node):
             for face in faces:
                 name, sim = self.db.match(face.embedding)
                 self.logger.info(f"match result: {name}, sim={sim}")
+
+                # 初始化结果消息
                 result = FaceResult()
+                
                 if name:
                     result.name = name
                     result.similarity = float(sim)
+                    
+                    # 上传图像并获取URL
+                    try:
+                        image_url = self.image_uploader.upload_image(msg, name)
+                        if image_url:
+                            result.image_url = image_url
+                        else:
+                            result.image_url = ""
+                    except Exception as upload_error:
+                        result.image_url = ""
+                        self.logger.error(f"上传图像时出错: {upload_error}")
+                        
                 else:
                     # 没有匹配到人脸时，设置name为空字符串，相似度为0
                     result.name = ""
                     result.similarity = 0.0
+                    result.image_url = ""  # 没有人脸时URL为空
+                
                 self.pub.publish(result)
 
         except Exception as e:
