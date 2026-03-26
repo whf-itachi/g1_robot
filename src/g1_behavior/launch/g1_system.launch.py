@@ -4,12 +4,6 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        # USB 摄像头节点
-        Node(
-            package="g1_camera",
-            executable="face_node_direct"
-        ),
-
         # 人脸识别节点
         Node(
             package="g1_face",

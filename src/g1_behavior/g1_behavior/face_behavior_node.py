@@ -43,7 +43,7 @@ class FaceBehaviorNode(Node):
             # 订阅图像话题，用于获取人脸识别的图像 用于发送给企微
             self.image_sub = self.create_subscription(
                 Image,
-                "/camera/standard_image",
+                "/c920/image_raw",
                 self.image_callback,
                 10
             )

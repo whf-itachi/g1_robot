@@ -64,7 +64,7 @@ class FaceNode(Node):
         try:
             self.sub = self.create_subscription(
                 Image,
-                "/camera/standard_image",
+                "/c920/image_raw",
                 self.callback,
                 10
             )

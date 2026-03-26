@@ -31,7 +31,7 @@ g1_robot/
 | 包名 | 功能 | 类型 | 主要节点 |
 |------|------|------|----------|
 | `g1_interfaces` | 自定义消息接口 | ament_cmake | - |
-| `g1_camera` | 视频流解码/USB 摄像头 | ament_python | `camera_node`, `face_node_direct` |
+| `g1_camera` | 视频流解码/USB 摄像头 | ament_python | `camera_node` |
 | `g1_face` | InsightFace 人脸识别 | ament_python | `face_node` |
 | `g1_behavior` | 面部行为响应（支持打招呼、企业微信通知等） | ament_python | `face_behavior_node` |
 
@@ -78,19 +78,15 @@ pip install sounddevice  # 音频输入输出
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      G1 机器人                               │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐   │
-│  │ 前置摄像头   │────▶│ video stream│     │ 运动执行器   │   │
-│  └─────────────┘     └──────┬──────┘     └──────▲──────┘   │
-└─────────────────────────────┼────────────────────┼──────────┘
-                              │                    │
+│  ┌─────────────┐                                         ┌─────────────┐   │
+│  │ 前置摄像头   │──┐                                   │ 运动执行器   │   │
+│  └─────────────┘  │    ┌─────────────┐               └──────▲──────┘   │
+│                   ▼    │ video stream│                      │          │
+│                  /c920/image_raw    └────────────────────────┼──────────┘
+└──────────────────────────────────────────────────────────────┼──────────┘
+                                                             │
          ┌────────────────────┼────────────────────┼──────────┐
          │  ROS2              │                    │          │
-         │                    ▼                    │          │
-         │  ┌──────────────────────────┐          │          │
-         │  │   face_node_direct       │          │          │
-         │  │   (图像转发/桥接)        │          │          │
-         │  └──────────────────────────┘          │          │
-         │                    │                    │          │
          │                    ▼                    │          │
          │  ┌──────────────────────────┐          │          │
          │  │   face_node              │          │          │
@@ -158,15 +154,13 @@ ros2 launch g1_behavior g1_system.launch.py
 | 话题名 | 消息类型 | 发布节点 |
 |--------|----------|----------|
 | `/face/result` | `g1_interfaces/msg/FaceResult` | `face_node` |
-| `/camera/standard_image` | `sensor_msgs/msg/Image` | `face_node_direct` |
 
 ### 订阅的话题
 
 | 话题名 | 消息类型 | 订阅节点 |
 |--------|----------|----------|
 | `/frontvideostream` | `unitree_go/msg/Go2FrontVideoData` | `camera_node` |
-| `/c920/image_raw` | `sensor_msgs/msg/Image` | `face_node_direct` |
-| `/camera/standard_image` | `sensor_msgs/msg/Image` | `face_node` |
+| `/c920/image_raw` | `sensor_msgs/msg/Image` | `face_node`, `face_behavior_node` |
 | `/face/result` | `g1_interfaces/msg/FaceResult` | `face_behavior_node` |
 
 ## 📝 自定义消息
