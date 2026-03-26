@@ -80,7 +80,7 @@ class FaceNode(Node):
         self.frame_counter += 1
         if self.frame_counter % self.process_every_n_frames != 0:
             return  # 跳过此帧
-        
+
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
             faces = self.detector.get(frame)
@@ -89,12 +89,16 @@ class FaceNode(Node):
             for face in faces:
                 name, sim = self.db.match(face.embedding)
                 self.logger.info(f"match result: {name}, sim={sim}")
-
+                result = FaceResult()
                 if name:
-                    result = FaceResult()
                     result.name = name
                     result.similarity = float(sim)
-                    self.pub.publish(result)
+                else:
+                    # 没有匹配到人脸时，设置name为空字符串，相似度为0
+                    result.name = ""
+                    result.similarity = 0.0
+                self.pub.publish(result)
+
         except Exception as e:
             self.logger.error(f"Error processing image: {e}")
             self.logger.error(traceback.format_exc())

@@ -179,7 +179,7 @@ class GreetingHandler(FaceResultHandler):
 
     def handle(self, face_result: FaceResult) -> bool:
         """
-        处理人脸识别结果，如果相似度足够高则触发问候
+        处理人脸识别结果，根据相似度和姓名触发不同的问候
 
         Args:
             face_result: 人脸识别结果消息
@@ -188,7 +188,7 @@ class GreetingHandler(FaceResultHandler):
             bool: 处理是否成功
         """
         self.logger.info(f"[DEBUG] Received face result - Name: {face_result.name}, Similarity: {face_result.similarity}")
-        
+
         # 获取当前机器人状态
         with self.state_lock:
             current_state = self.robot_state
@@ -205,61 +205,75 @@ class GreetingHandler(FaceResultHandler):
         name = face_result.name
         similarity = face_result.similarity
         self.logger.info(f"[DEBUG] Processing face recognition - Name: {name}, Similarity: {similarity}")
-        
-        # 相似度过滤
-        if similarity < 0.6:
-            self.logger.info(f"[DEBUG] Face similarity {similarity} is below threshold, ignoring")
-            return True
 
-        # 使用 ROS2 时钟进行去重检查
-        now = self.node.get_clock().now().nanoseconds / 1e9
-        self.logger.info(f"[DEBUG] Checking deduplication for {name}")
-        with self.seen_lock:
-            if name in self.last_seen:
-                time_since_last = now - self.last_seen[name]
-                self.logger.info(f"[DEBUG] Last seen {name} {time_since_last}s ago, threshold is {self.dedup_interval}s")
-                if time_since_last < self.dedup_interval:
-                    self.logger.info(f"[DEBUG] Deduplication active, ignoring face recognition for {name}")
-                    return True
-            self.last_seen[name] = now
+        # 根据人脸识别结果决定问候内容
+        if name and name.strip():  # 如果有人脸且有名字
+            if similarity >= 0.6:  # 相似度大于等于0.6，按现有逻辑打招呼
+                greeting_text = f"Hello {name}!"
+            else:  # 相似度小于0.6，询问模式
+                greeting_text = f"Hi, are you {name}? You look quite different lately!"
+        else:  # 如果没有人脸或名字为空，欢迎模式
+            greeting_text = "Hello, welcome!"
+
+        # 使用 ROS2 时钟进行去重检查（仅针对有名字的情况，避免每次无人脸都触发欢迎）
+        if name and name.strip():
+            now = self.node.get_clock().now().nanoseconds / 1e9
+            self.logger.info(f"[DEBUG] Checking deduplication for {name}")
+            with self.seen_lock:
+                if name in self.last_seen:
+                    time_since_last = now - self.last_seen[name]
+                    self.logger.info(f"[DEBUG] Last seen {name} {time_since_last}s ago, threshold is {self.dedup_interval}s")
+                    if time_since_last < self.dedup_interval:
+                        self.logger.info(f"[DEBUG] Deduplication active, ignoring face recognition for {name}")
+                        return True
+                self.last_seen[name] = now
+        else:
+            # 对于无名访问者，我们仍可以限制欢迎频率，但使用通用标识
+            now = self.node.get_clock().now().nanoseconds / 1e9
+            anonymous_key = "__anonymous__"  # 使用特殊键来追踪无名访问者
+            self.logger.info(f"[DEBUG] Checking deduplication for anonymous visitor")
+            with self.seen_lock:
+                if anonymous_key in self.last_seen:
+                    time_since_last = now - self.last_seen[anonymous_key]
+                    self.logger.info(f"[DEBUG] Last seen anonymous visitor {time_since_last}s ago, threshold is {self.dedup_interval}s")
+                    if time_since_last < self.dedup_interval:
+                        self.logger.info(f"[DEBUG] Deduplication active, ignoring anonymous visitor")
+                        return True
+                self.last_seen[anonymous_key] = now
 
         self.logger.info(
-            f"Face detected: {name}, triggering greeting sequence"
+            f"Face detected: {name}, similarity: {similarity}, triggering greeting: '{greeting_text}'"
         )
         # 使用线程 避免阻塞 ROS 回调导致 rclpy.spin 无法处理其他消息
-        self.logger.info(f"[DEBUG] Starting greeting thread for {name}")
-        
-        # 检查是否有过多的问候线程在运行
-        active_threads = threading.active_count()
-        if active_threads > 10:  # 设置线程数上限
-            self.logger.warning(f"Too many threads ({active_threads}), skipping greeting for {name}")
-            return False
-            
-        Thread(target=self._handle_greeting, args=(name,), daemon=True).start()
+        self.logger.info(f"[DEBUG] Starting greeting thread for {name} with greeting: {greeting_text}")
+
+        # 启动问候线程（已移除线程数量检查）
+        Thread(target=self._handle_greeting_with_text, args=(name, greeting_text), daemon=True).start()
 
         return True
 
-    def _handle_greeting(self, name: str):
-        self.logger.info(f"[DEBUG] Starting greeting sequence for {name}")
+    def _handle_greeting_with_text(self, name: str, greeting_text: str):
+        self.logger.info(f"[DEBUG] Starting greeting sequence for {name} with text: {greeting_text}")
 
         with self.state_lock:
             self.robot_state = "GREETING"
 
         try:
             # 使用外接扬声器播放问候语
-            greeting_text = f"Hello {name}!"
             if self.audio_handler:
                 self.logger.info(f"Playing greeting via external speaker: {greeting_text}")
                 success = self.audio_handler.play_with_external_speaker(greeting_text)
                 if not success:
                     self.logger.warning("Failed to play via external speaker, falling back to robot's built-in speaker")
-                    
+
                 if self.unitree_client:
                     try:
-                        self.unitree_client.do_behavior(
-                            "greet",
-                            person_name=name
-                        )
+                        # 根据是否有名字决定行为参数
+                        if name and name.strip():
+                            self.unitree_client.do_behavior(
+                                "greet",
+                                person_name=name
+                            )
                     except Exception as client_error:
                         self.logger.error(f"UnitreeClient greeting failed: {client_error}")
                         self.logger.info("Voice greeting only (no action due to UnitreeClient failure)")
@@ -270,10 +284,17 @@ class GreetingHandler(FaceResultHandler):
                 # 如果音频处理器不可用，使用机器人内置扬声器（仅当UnitreeClient可用时）
                 if self.unitree_client:
                     try:
-                        self.unitree_client.do_behavior(
-                            "greet",
-                            person_name=name
-                        )
+                        # 根据是否有名字决定行为参数
+                        if name and name.strip():
+                            self.unitree_client.do_behavior(
+                                "greet",
+                                person_name=name
+                            )
+                        else:
+                            # 对于无名访问者，不传递person_name
+                            self.unitree_client.do_behavior(
+                                "greet"
+                            )
                     except Exception as client_error:
                         self.logger.error(f"UnitreeClient greeting failed: {client_error}")
                         self.logger.info("No greeting available (both AudioHandler and UnitreeClient failed)")
@@ -287,7 +308,12 @@ class GreetingHandler(FaceResultHandler):
             with self.state_lock:
                 self.robot_state = "IDLE"
 
-        self.logger.info(f"Greeting finished: {name}")
+        self.logger.info(f"Greeting finished: {name} with text: {greeting_text}")
+
+    def _handle_greeting(self, name: str):
+        # 为了向后兼容，保留原始方法，使用默认问候语
+        greeting_text = f"Hello {name}!" if name and name.strip() else "Hello, welcome!"
+        self._handle_greeting_with_text(name, greeting_text)
 
 
 class WeChatWorkApiRequestHandler(FaceResultHandler):
