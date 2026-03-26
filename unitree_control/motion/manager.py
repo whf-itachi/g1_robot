@@ -47,18 +47,23 @@ class MotionManager:
     def handle_behavior(self, name, params):
         print(f"🎬 Behavior: {name}")
 
-        if name == "wave":
-            self.executor.execute(WaveMotion())
+        try:
+            if name == "wave":
+                self.executor.execute(WaveMotion())
 
-        elif name == "spin":
-            self.executor.execute(SpinMotion())
+            elif name == "spin":
+                self.executor.execute(SpinMotion())
 
-        elif name == "greet":
-            person_name = params.get("person_name", "my friend")
-            self.executor.execute(GreetMotion(person_name))
+            elif name == "greet":
+                person_name = params.get("person_name", "my friend")
+                self.executor.execute(GreetMotion(person_name))
 
-        else:
-            print(f"⚠️ Unknown behavior: {name}")
+            else:
+                print(f"⚠️ Unknown behavior: {name}")
+        except Exception as e:
+            print(f"❌ Error executing behavior {name}: {e}")
+            import traceback
+            print(traceback.format_exc())
 
     def handle_control(self, cmd):
         vx = cmd.get("vx", 0.0)

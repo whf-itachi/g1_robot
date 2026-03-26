@@ -73,6 +73,14 @@ class AudioHandler:
         except Exception as e:
             logger.error(f"播放失败: {e}")
             return False
+        finally:
+            # 确保临时文件被清理
+            if wav_file and os.path.exists(wav_file):
+                try:
+                    os.remove(wav_file)
+                    logger.debug(f"临时文件已清理: {wav_file}")
+                except Exception as cleanup_error:
+                    logger.error(f"清理临时文件失败 {wav_file}: {cleanup_error}")
 
 
 if __name__ == "__main__":

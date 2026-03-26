@@ -228,6 +228,13 @@ class GreetingHandler(FaceResultHandler):
         )
         # 使用线程 避免阻塞 ROS 回调导致 rclpy.spin 无法处理其他消息
         self.logger.info(f"[DEBUG] Starting greeting thread for {name}")
+        
+        # 检查是否有过多的问候线程在运行
+        active_threads = threading.active_count()
+        if active_threads > 10:  # 设置线程数上限
+            self.logger.warning(f"Too many threads ({active_threads}), skipping greeting for {name}")
+            return False
+            
         Thread(target=self._handle_greeting, args=(name,), daemon=True).start()
 
         return True

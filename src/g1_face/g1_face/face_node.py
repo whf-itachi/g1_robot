@@ -27,6 +27,10 @@ class FaceNode(Node):
         # 使用自定义日志记录器
         self.logger = get_logger(self.get_name())
 
+        # 添加帧率控制
+        self.process_every_n_frames = 5  # 每5帧处理一次，降低CPU负载
+        self.frame_counter = 0
+
         try:
             self.bridge = CvBridge()
             self.logger.info("Initializing InsightFace detector...")
@@ -66,12 +70,17 @@ class FaceNode(Node):
             )
 
             self.pub = self.create_publisher(FaceResult, "/face/result", 10)
-            self.logger.info(f"人脸识别节点就绪，数据库大小: {len(self.db.data)}")
+            self.logger.info(f"人脸识别节点就绪，数据库大小: {len(self.db.data)}, processing every {self.process_every_n_frames} frames")
         except Exception as e:
             self.logger.error(f"Failed to create subscription/publisher: {e}")
             raise
 
     def callback(self, msg):
+        # 帧率控制：只处理每N帧中的1帧
+        self.frame_counter += 1
+        if self.frame_counter % self.process_every_n_frames != 0:
+            return  # 跳过此帧
+        
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
             faces = self.detector.get(frame)
