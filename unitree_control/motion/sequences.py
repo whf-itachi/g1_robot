@@ -77,7 +77,8 @@ class GreetMotion(MotionBase):
                 self.timer = 0
                 # 同时开始说话和挥手
                 # ctx.speak(f"Hello {self.person_name}!")
-                ctx.shake_hand()
+                # ctx.shake_hand()
+                ctx.face_wave()
                 self.has_started_speaking = True
                 self.has_started_shakehand = True
                 

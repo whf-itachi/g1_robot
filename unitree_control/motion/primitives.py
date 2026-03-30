@@ -27,3 +27,6 @@ class MotionPrimitives:
 
     def speak(self, text, volume=80):
         self.d.speak(text, volume)
+
+    def face_wave(self):
+        self.d.face_wave()
