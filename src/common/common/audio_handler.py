@@ -93,9 +93,9 @@ class AudioHandler:
 
             logger.info(f"开始播放: {wav_name}")
             if wav_name == "greet_stranger":
-                wav_file = f"/tmp/greet_stranger.wav"
+                wav_file = f"/home/unitree/haitch/greet_stranger.wav"
             else:
-                wav_file = f"/tmp/greet_stranger.wav"
+                wav_file = f"/home/unitree/haitch/greet_stranger.wav"
 
             subprocess.run([
                 "aplay",
