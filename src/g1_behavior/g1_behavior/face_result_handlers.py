@@ -301,13 +301,13 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         # 企业微信机器人配置 - 直接在代码中定义
         self.bot_id = "aibPK7lIHLBWw8DTawBKdyh1Q9cwXIqp29I"  # 请替换为实际的Bot ID
         self.secret = "DraM3GAPGWuGCeX50pDkasYXtnFiPsaIrjyNAh82xn7"  # 请替换为实际的Secret
-        # self.target_users = ["maik", "LiHuo", "Na"]  # 目标用户列表，支持多个用户
-        self.target_users = ["ZhouYangYang", "LiHuo", "Nathan"]  # 目标用户列表，支持多个用户
+        self.target_users = ["maik", "LiHuo", "Na"]  # 目标用户列表，支持多个用户
+        # self.target_users = ["ZhouYangYang", "LiHuo", "Nathan"]  # 目标用户列表，支持多个用户
 
         self.ws_url = "wss://openws.work.weixin.qq.com"
 
         # 人脸识别去重机制 - 记录每个人脸最后发送时间
-        self.duplicate_interval = 300  # 5分钟
+        self.duplicate_interval = 600  # 10分钟
 
         # 检查必要的库是否可用
         self.websocket_available = WEBSOCKET_AVAILABLE
