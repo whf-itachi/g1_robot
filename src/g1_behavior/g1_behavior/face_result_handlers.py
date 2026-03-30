@@ -209,7 +209,7 @@ class GreetingHandler(FaceResultHandler):
             else:  # 相似度小于0.6，询问模式
                 greeting_text = f"Hi, are you {name}? You look quite different lately!"
         else:  # 如果没有人脸或名字为空，欢迎模式
-            greeting_text = "Hello, welcome to Haitch!"
+            greeting_text = "Hello, welcome!"
 
         # 使用 ROS2 时钟进行去重检查（仅针对有名字的情况，避免每次无人脸都触发欢迎）
         if name and name.strip():
@@ -272,7 +272,11 @@ class GreetingHandler(FaceResultHandler):
             # 使用外接扬声器播放问候语
             if self.audio_handler:
                 self.logger.info(f"Playing greeting via external speaker: {greeting_text}")
-                success = self.audio_handler.play_with_external_speaker(greeting_text)
+                if name:
+                    success = self.audio_handler.play_with_external_speaker(greeting_text)
+                else:
+                    success = self.audio_handler.play_with_special_wav("greet_stranger")
+
                 if not success:
                     self.logger.warning("Failed to play via external speaker, falling back to robot's built-in speaker")
                 else:
@@ -301,8 +305,8 @@ class WeChatWorkApiRequestHandler(FaceResultHandler):
         # 企业微信机器人配置 - 直接在代码中定义
         self.bot_id = "aibPK7lIHLBWw8DTawBKdyh1Q9cwXIqp29I"  # 请替换为实际的Bot ID
         self.secret = "DraM3GAPGWuGCeX50pDkasYXtnFiPsaIrjyNAh82xn7"  # 请替换为实际的Secret
-        self.target_users = ["maik", "LiHuo", "Na"]  # 目标用户列表，支持多个用户
-        # self.target_users = ["ZhouYangYang", "LiHuo", "Nathan"]  # 目标用户列表，支持多个用户
+        # self.target_users = ["maik", "LiHuo", "Na"]  # 目标用户列表，支持多个用户
+        self.target_users = ["ZhouYangYang", "LiHuo", "Nathan"]  # 目标用户列表，支持多个用户
 
         self.ws_url = "wss://openws.work.weixin.qq.com"
 

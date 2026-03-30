@@ -83,6 +83,42 @@ class AudioHandler:
                     logger.error(f"清理临时文件失败 {wav_file}: {cleanup_error}")
 
 
+    def play_with_special_wav(self, wav_name: str) -> bool:
+        if self.y11_card is None:
+            logger.error("❌ 无 Y11 设备")
+            return False
+
+        try:
+            import uuid
+
+            logger.info(f"开始播放: {wav_name}")
+            if wav_name == "greet_stranger":
+                wav_file = f"/tmp/greet_stranger.wav"
+            else:
+                wav_file = f"/tmp/greet_stranger.wav"
+
+            subprocess.run([
+                "aplay",
+                "-D", f"plughw:{self.y11_card},0",
+                wav_file
+            ], check=True)
+
+            logger.info("播放 wav 完成")
+            return True
+
+        except Exception as e:
+            logger.error(f"播放失败: {e}")
+            return False
+        finally:
+            # 确保临时文件被清理
+            if wav_file and os.path.exists(wav_file):
+                try:
+                    os.remove(wav_file)
+                    logger.debug(f"临时文件已清理: {wav_file}")
+                except Exception as cleanup_error:
+                    logger.error(f"清理临时文件失败 {wav_file}: {cleanup_error}")
+
+
 if __name__ == "__main__":
     audio = AudioHandler()
     audio.play_with_external_speaker("Hello Nathan, this is Y11 speaker speaking.")
